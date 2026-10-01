@@ -1020,7 +1020,9 @@ function loadDefaultScene() {
     distanceM: 1.0,
     positionXDeg: 0.0,
     positionYDeg: 0.0,
-    lockMode: 'visual',
+    lockMode: 'physical',
+    widthM: sizeFromAngleM(3.0, 1.0),
+    heightM: sizeFromAngleM(5.0, 1.0),
     angleXDeg: 3.0,
     angleYDeg: 5.0,
     color: '#111111',
@@ -1033,7 +1035,9 @@ function loadDefaultScene() {
     distanceM: 4.0,
     positionXDeg: 8.531,
     positionYDeg: 0.0,
-    lockMode: 'visual',
+    lockMode: 'physical',
+    widthM: sizeFromAngleM(0.75, 4.0),
+    heightM: sizeFromAngleM(1.251, 4.0),
     angleXDeg: 0.75,
     angleYDeg: 1.251,
     color: '#440cde',
@@ -1046,7 +1050,9 @@ function loadDefaultScene() {
     distanceM: 0.4,
     positionXDeg: -7.5,
     positionYDeg: 0.0,
-    lockMode: 'visual',
+    lockMode: 'physical',
+    widthM: sizeFromAngleM(7.495, 0.4),
+    heightM: sizeFromAngleM(12.456, 0.4),
     angleXDeg: 7.495,
     angleYDeg: 12.456,
     color: '#AF1919',
@@ -1736,15 +1742,20 @@ function addObjectFromControls() {
   const room = currentRoom();
   const baseDistance = focusedObject()?.distanceM ?? Math.min(1.25, room.depthM * 0.4);
   const offsetIndex = state.objects.length % 5;
+  const newDistanceM = clamp(baseDistance + 0.2 * (offsetIndex - 2), 0.2, room.depthM - 0.1);
   const obj = newObject({
     type,
     text,
     name: type === 'letter' ? text : `${type[0].toUpperCase()}${type.slice(1)} ${state.nextId}`,
     color,
-    distanceM: clamp(baseDistance + 0.2 * (offsetIndex - 2), 0.2, room.depthM - 0.1),
+    distanceM: newDistanceM,
     positionXDeg: (offsetIndex - 2) * 4.0,
     positionYDeg: 0,
-    lockMode: 'visual',
+    lockMode: 'physical',
+    // Preserve the old 3° × 3° appearance at the instant the object is created,
+    // then keep those physical dimensions fixed as the object moves in depth.
+    widthM: sizeFromAngleM(3, newDistanceM),
+    heightM: sizeFromAngleM(3, newDistanceM),
     angleXDeg: 3,
     angleYDeg: 3,
   });
