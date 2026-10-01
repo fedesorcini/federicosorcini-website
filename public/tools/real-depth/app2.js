@@ -882,7 +882,7 @@ function loadDefaultScene() {
     text: 'X',
     name: 'X',
     distanceM: 2.0,
-    positionXDeg: 8.0,
+    positionXDeg: 8.531,
     positionYDeg: 0.0,
     lockMode: 'visual',
     angleXDeg: 2.5,
@@ -1040,11 +1040,24 @@ function animate() {
 function onViewportPointerDown(event) {
   const rect = renderer.domElement.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
+
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(pickMeshes, false);
-  if (!hits.length) return;
+
+  // Clicking empty space clears the current selection.
+  // The fixation target is NOT changed; it simply remains focused
+  // without being selected for editing.
+  if (!hits.length) {
+    state.selectedId = null;
+    updateOutlines();
+    refreshUi();
+    markDirty();
+    return;
+  }
+
   const id = hits[0].object.userData.simObjectId;
   selectObject(id);
 }

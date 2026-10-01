@@ -115,6 +115,14 @@ const MAX_STIMULUS_TEXTURE_DIM = 2048;
 const MIN_STIMULUS_TEXTURE_DIM = 96;
 const stimulusSourceCache = new Map();
 
+// Keyboard movement controls. A key press moves once immediately. If the key
+// remains held, repeating begins after 300 ms and continues at a steady rate.
+const KEYBOARD_NUDGE_ANGLE_DEG = 0.25;
+const KEYBOARD_NUDGE_DEPTH_M = 0.05;
+const KEYBOARD_HOLD_DELAY_MS = 300;
+const KEYBOARD_REPEAT_MS = 60;
+const activeMovementKeys = new Map();
+
 const pickMeshes = [];
 
 function numberValue(input, fallback) {
@@ -1038,6 +1046,7 @@ function animate() {
 }
 
 function onViewportPointerDown(event) {
+  stopAllMovementKeys();
   const rect = renderer.domElement.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
 
@@ -1370,6 +1379,128 @@ function commitSelectedFromEditor(field, { refreshEditor = true } = {}) {
   markDirty();
 }
 
+function isEditableKeyboardTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'));
+}
+
+function movementActionForEvent(event) {
+  switch (event.code) {
+    case 'ArrowLeft': return 'left';
+    case 'ArrowRight': return 'right';
+    case 'ArrowUp': return 'up';
+    case 'ArrowDown': return 'down';
+    case 'KeyW': return 'away';
+    case 'KeyS': return 'closer';
+    default: return null;
+  }
+}
+
+function nudgeSelectedObject(action) {
+  const obj = selectedObject();
+  if (!obj) return;
+
+  const before = {
+    distanceM: obj.distanceM,
+    positionXDeg: obj.positionXDeg,
+    positionYDeg: obj.positionYDeg,
+  };
+
+  if (action === 'left') {
+    obj.positionXDeg -= KEYBOARD_NUDGE_ANGLE_DEG;
+  } else if (action === 'right') {
+    obj.positionXDeg += KEYBOARD_NUDGE_ANGLE_DEG;
+  } else if (action === 'up') {
+    obj.positionYDeg += KEYBOARD_NUDGE_ANGLE_DEG;
+  } else if (action === 'down') {
+    obj.positionYDeg -= KEYBOARD_NUDGE_ANGLE_DEG;
+  } else if (action === 'away') {
+    obj.distanceM += KEYBOARD_NUDGE_DEPTH_M;
+  } else if (action === 'closer') {
+    obj.distanceM -= KEYBOARD_NUDGE_DEPTH_M;
+  } else {
+    return;
+  }
+
+  sanitizeObjectToRoom(obj);
+
+  const distanceChanged = Math.abs(obj.distanceM - before.distanceM) > 1e-9;
+  const positionChanged =
+    Math.abs(obj.positionXDeg - before.positionXDeg) > 1e-9 ||
+    Math.abs(obj.positionYDeg - before.positionYDeg) > 1e-9;
+
+  if (!distanceChanged && !positionChanged) return;
+
+  applyObjectTransform(obj);
+
+  // Moving in depth changes optical blur. If the fixation object itself moves,
+  // every object's defocus changes; otherwise only the moved object needs a new
+  // pre-blurred texture. Lateral/vertical movement needs no texture rebuild.
+  if (distanceChanged) {
+    if (obj.id === state.focusedId) {
+      refreshAllStimulusTextures();
+    } else {
+      refreshObjectStimulus(obj);
+    }
+  }
+
+  refreshUi();
+  markDirty();
+}
+
+function stopMovementKey(code) {
+  const active = activeMovementKeys.get(code);
+  if (!active) return;
+  clearTimeout(active.delayTimer);
+  if (active.repeatTimer) clearInterval(active.repeatTimer);
+  activeMovementKeys.delete(code);
+}
+
+function stopAllMovementKeys() {
+  for (const code of [...activeMovementKeys.keys()]) {
+    stopMovementKey(code);
+  }
+}
+
+function onMovementKeyDown(event) {
+  const action = movementActionForEvent(event);
+  if (!action) return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (isEditableKeyboardTarget(event.target)) return;
+  if (!selectedObject()) return;
+
+  // Prevent arrow keys from scrolling the page and suppress the browser's own
+  // key-repeat timing; repetition is handled explicitly below.
+  event.preventDefault();
+
+  const code = event.code;
+  if (activeMovementKeys.has(code)) return;
+
+  nudgeSelectedObject(action);
+
+  const active = {
+    action,
+    delayTimer: null,
+    repeatTimer: null,
+  };
+
+  active.delayTimer = window.setTimeout(() => {
+    // The key may have been released during the delay.
+    if (!activeMovementKeys.has(code)) return;
+    nudgeSelectedObject(action);
+    active.repeatTimer = window.setInterval(() => {
+      nudgeSelectedObject(action);
+    }, KEYBOARD_REPEAT_MS);
+  }, KEYBOARD_HOLD_DELAY_MS);
+
+  activeMovementKeys.set(code, active);
+}
+
+function onMovementKeyUp(event) {
+  if (!movementActionForEvent(event)) return;
+  stopMovementKey(event.code);
+}
+
 function addObjectFromControls() {
   const type = els.newObjectType.value;
   const text = safeName(els.newObjectText.value, 'A').slice(0, 12);
@@ -1502,6 +1633,13 @@ function bindEvents() {
   window.addEventListener('resize', () => {
     updateCameraAndCalibration();
     drawDepthSchematic();
+  });
+
+  window.addEventListener('keydown', onMovementKeyDown);
+  window.addEventListener('keyup', onMovementKeyUp);
+  window.addEventListener('blur', stopAllMovementKeys);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAllMovementKeys();
   });
 }
 
