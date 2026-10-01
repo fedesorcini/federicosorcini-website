@@ -962,7 +962,7 @@ function newObject({
   positionYDeg = null,
   xM = 0,
   yM = 0,
-  lockMode = 'visual',
+  lockMode = 'physical',
   widthM = 0.05,
   heightM = 0.05,
   angleXDeg = 3,
@@ -1017,10 +1017,10 @@ function loadDefaultScene() {
     type: 'letter',
     text: 'N',
     name: 'N',
-    distanceM: 0.4,
+    distanceM: 1.0,
     positionXDeg: 0.0,
     positionYDeg: 0.0,
-    lockMode: 'visual',
+    lockMode: 'physical',
     angleXDeg: 3.0,
     angleYDeg: 5.0,
     color: '#111111',
@@ -1030,13 +1030,26 @@ function loadDefaultScene() {
     type: 'letter',
     text: 'X',
     name: 'X',
-    distanceM: 2.0,
+    distanceM: 4.0,
     positionXDeg: 8.531,
     positionYDeg: 0.0,
-    lockMode: 'visual',
-    angleXDeg: 2.5,
-    angleYDeg: 4.0,
+    lockMode: 'physical',
+    angleXDeg: 0.75,
+    angleYDeg: 1.251,
     color: '#440cde',
+  });
+
+  const a = newObject({
+    type: 'letter',
+    text: 'A',
+    name: 'A',
+    distanceM: 2.0,
+    positionXDeg: -6.5,
+    positionYDeg: 0.0,
+    lockMode: 'physical',
+    angleXDeg: 9.977,
+    angleYDeg: 16.561,
+    color: '#AF1919',
   });
 
   // N starts selected and is the fixation target
@@ -1045,6 +1058,8 @@ function loadDefaultScene() {
 
   applyObjectTransform(n);
   applyObjectTransform(x);
+  applyObjectTransform(a);
+
   refreshAllStimulusTextures();
 
   refreshUi();
