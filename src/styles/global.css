@@ -222,6 +222,48 @@ p {
   }
 }
 
+.bio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.5fr);
+  gap: 70px;
+  align-items: center;
+}
+
+.bio-inner {
+  min-width: 0;
+}
+
+.bio-photo {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bio-photo img {
+  width: 100%;
+  max-width: 340px;
+
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: center;
+
+  border-radius: 4px;
+}
+
+@media (max-width: 800px) {
+  .bio-layout {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .bio-photo {
+    justify-content: flex-start;
+  }
+
+  .bio-photo img {
+    max-width: 300px;
+  }
+}
+
 /* =========================
    CONTACT PAGE
    ========================= */

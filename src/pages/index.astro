@@ -7,33 +7,43 @@ import BaseLayout from "../layouts/BaseLayout.astro";
   description="Vision science research, publications, and interactive scientific tools by Federico Sorcini."
 >
   <section class="bio-section">
-    <div class="container bio-inner">
+    <div class="container bio-layout">
 
-      <h1>Federico Sorcini</h1>
+      <div class="bio-inner">
+        <h1>Federico Sorcini</h1>
 
-      <div class="bio-copy">
-        <p>
-          I am a researcher interested in vision science, visual perception,
-          attention, and psychophysiology.
-        </p>
+        <div class="bio-copy">
+          <p>
+            I am a researcher interested in vision science, visual perception,
+            attention, and psychophysiology.
+          </p>
 
-        <p>
-          My work focuses on understanding how characteristics of the visual
-          environment influence perception and attention, with particular
-          interests in depth, perceptual load, and the relationship between
-          behavioral and physiological measures.
-        </p>
+          <p>
+            My work focuses on understanding how characteristics of the visual
+            environment influence perception and attention, with particular
+            interests in depth, perceptual load, and the relationship between
+            behavioral and physiological measures.
+          </p>
+        </div>
+
+        <div class="bio-links">
+          <a class="button" href="/research">
+            View research
+          </a>
+
+          <a class="button secondary" href="/tools">
+            Explore tools
+          </a>
+        </div>
       </div>
 
-      <div class="bio-links">
-        <a class="button" href="/research">
-          View research
-        </a>
-
-        <a class="button secondary" href="/tools">
-          Explore tools
-        </a>
+      <div class="bio-photo">
+        <img
+          src="/FSorcini.jpeg"
+          alt="Federico Sorcini"
+        />
       </div>
+
     </div>
   </section>
 
