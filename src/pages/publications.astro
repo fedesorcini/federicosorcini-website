@@ -1,0 +1,233 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const publications = [
+  {
+    year: "2025",
+    title:
+      "Reading the Reader: Utilizing Eye Movements and Machine Learning to Enhance Accuracy during Diagnostic Visual Search",
+    authors: [
+      "Gregory J. DiGirolamo",
+      "Federico Sorcini",
+      "Leo Joskowicz",
+      "Yakir Winograd",
+      "Assaf Hoogi",
+      "Max P. Rosen",
+    ],
+    venue:
+      "Cancer Detection and Diagnosis: A Handbook of Emerging Technologies",
+    details:
+      "Chapter 10, 1st ed., CRC Press, Boca Raton, pp. 92–102",
+    link:
+      "https://doi.org/10.1201/9781003449942-12",
+  },
+
+  {
+    year: "2025",
+    title:
+      "Non-conscious detection of ST-segment elevation during physician ECG interpretation",
+    authors: [
+      "Gregory J. DiGirolamo",
+      "Nikolaos Kakouros",
+      "Federico Sorcini",
+      "Sofia Patrizi Sorcini",
+      "Jenna Dupell",
+      "Erin K. Sands",
+      "Max P. Rosen",
+    ],
+    venue: "Journal of Electrocardiology",
+    details: "Vol. 93, p. 154148",
+    link:
+      "https://doi.org/10.1016/j.jelectrocard.2025.154148",
+  },
+
+  {
+    year: "2025",
+    title:
+      "Non-Conscious Detection of “Missed” Lung Nodules by Radiologists: Expanding the Boundaries of Successful Processing During the Visual Assessment of Chest CT Scans",
+    authors: [
+      "Gregory J. DiGirolamo",
+      "Federico Sorcini",
+      "Zachary Zaniewski",
+      "Jonathan B. Kruskal",
+      "Max P. Rosen",
+    ],
+    venue: "Radiology",
+    details: "Vol. 314, e232996",
+    link:
+      "https://doi.org/10.1148/radiol.232996",
+  },
+];
+---
+
+<BaseLayout
+  title="Publications"
+  description="Publications by Federico Sorcini in vision science, visual perception, and diagnostic visual search."
+>
+  <section class="page-header publications-header">
+    <div class="container">
+      <h1>Publications</h1>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container publication-container">
+      <div class="publication-list">
+        {
+          publications.map((publication) => (
+            <article class="publication">
+
+              <div class="year">
+                {publication.year}
+              </div>
+
+              <div class="publication-content">
+
+                <h2>
+                  {publication.title}
+                </h2>
+
+                <p class="authors">
+                  {
+                    publication.authors.map((author, index) => (
+                      <>
+                        {author === "Federico Sorcini"
+                          ? <strong>{author}</strong>
+                          : author}
+
+                        {index < publication.authors.length - 1 && ", "}
+                      </>
+                    ))
+                  }
+                </p>
+
+                <p class="venue">
+                  <em>{publication.venue}</em>
+                  {publication.details && <>. {publication.details}</>}
+                </p>
+
+                <div class="publication-links">
+                  <a
+                    href={publication.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View publication →
+                  </a>
+                </div>
+
+              </div>
+
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .publications-header {
+    background: #F0E8D8;
+  }
+
+  .publication-container {
+    max-width: 980px;
+  }
+
+  .publication-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .publication {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 30px;
+
+    padding: 36px 0;
+
+    border-bottom: 1px solid #D9D5CC;
+  }
+
+  .publication:first-child {
+    padding-top: 6px;
+  }
+
+  .year {
+    padding-top: 7px;
+
+    color: #324C63;
+
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .publication-content h2 {
+    margin: 0 0 12px;
+
+    color: #324C63;
+
+    font-size: 1.45rem;
+    line-height: 1.4;
+
+    letter-spacing: -0.01em;
+  }
+
+  .authors {
+    margin: 0 0 7px;
+
+    color: #44535F;
+
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .authors strong {
+    color: #324C63;
+    font-weight: 700;
+  }
+
+  .venue {
+    margin: 0;
+
+    color: #66717A;
+
+    font-size: 0.98rem;
+    line-height: 1.6;
+  }
+
+  .publication-links {
+    margin-top: 14px;
+  }
+
+  .publication-links a {
+    color: #324C63;
+
+    font-size: 0.95rem;
+    font-weight: 700;
+
+    border-bottom: 1px solid #324C63;
+  }
+
+  .publication-links a:hover {
+    opacity: 0.7;
+  }
+
+  @media (max-width: 650px) {
+    .publication {
+      grid-template-columns: 1fr;
+      gap: 5px;
+
+      padding: 28px 0;
+    }
+
+    .year {
+      padding-top: 0;
+    }
+
+    .publication-content h2 {
+      font-size: 1.3rem;
+    }
+  }
+</style>

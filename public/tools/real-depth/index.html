@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Real Depth Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Real Depth Simulator</h1>
+      <p>Build a simple scene, choose a fixation target, and visualize depth-dependent defocus and binocular disparity.</p>
+    </div>
+    <div class="header-actions">
+      <button id="resetSceneBtn" class="button secondary" type="button">Reset scene</button>
+    </div>
+  </header>
+
+  <main class="app-grid">
+    <aside class="panel controls-panel" aria-label="Scene controls">
+      <section class="panel-section">
+        <h2>Optics</h2>
+
+        <label class="field-row">
+          <span>Pupil diameter</span>
+          <span class="field-with-unit">
+            <input id="pupilMm" type="number" min="1" max="9" step="0.1" value="4.0" />
+            <span>mm</span>
+          </span>
+        </label>
+
+        <label class="field-row">
+          <span>Interpupillary distance</span>
+          <span class="field-with-unit">
+            <input id="ipdMm" type="number" min="45" max="80" step="0.5" value="64" />
+            <span>mm</span>
+          </span>
+        </label>
+
+        <label class="switch-row">
+          <span>
+            <strong>Defocus blur</strong>
+            <small>Circle-of-confusion approximation from dioptric error</small>
+          </span>
+          <input id="blurToggle" type="checkbox" checked />
+        </label>
+
+        <label class="switch-row">
+          <span>
+            <strong>Diplopia</strong>
+            <small>Overlay of left/right eye views aligned at fixation</small>
+          </span>
+          <input id="diplopiaToggle" type="checkbox" />
+        </label>
+
+        <label class="field-row">
+          <span>Max rendered blur radius</span>
+          <span class="field-with-unit">
+            <input id="maxBlurPx" type="number" min="2" max="60" step="1" value="24" />
+            <span>px</span>
+          </span>
+        </label>
+      </section>
+
+      <section class="panel-section">
+        <h2>Display calibration</h2>
+        <p class="helper">For meaningful on-screen visual angles, keep browser zoom at 100% and enter the physical width of the display.</p>
+
+        <label class="field-row">
+          <span>Display width</span>
+          <span class="field-with-unit">
+            <input
+              id="displayWidthCm"
+              type="number"
+              min="10"
+              max="200"
+              step="0.1"
+              value="80.0"
+            />
+            <span>cm</span>
+          </span>
+        </label>
+
+        <label class="field-row">
+          <span>Viewing distance</span>
+          <span class="field-with-unit">
+            <input id="viewingDistanceCm" type="number" min="20" max="300" step="0.5" value="60.0" />
+            <span>cm</span>
+          </span>
+        </label>
+
+        <div class="readout-grid compact">
+          <div><span>Viewport FOV</span><strong id="viewportFovReadout">—</strong></div>
+          <div><span>Pixels / degree</span><strong id="ppdReadout">—</strong></div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h2>Room</h2>
+        <label class="field-row">
+          <span>Width</span>
+          <span class="field-with-unit">
+            <input
+              id="roomWidthM"
+              type="number"
+              min="1.5"
+              max="15"
+              step="0.1"
+              value="7.0"
+            />
+            <span>m</span>
+          </span>
+        </label>
+        <label class="field-row">
+          <span>Height</span>
+          <span class="field-with-unit">
+            <input
+              id="roomHeightM"
+              type="number"
+              min="1.8"
+              max="8"
+              step="0.1"
+              value="3.0"
+            />
+            <span>m</span>
+          </span>
+        </label>
+        <label class="field-row">
+          <span>Depth</span>
+          <span class="field-with-unit">
+            <input
+              id="roomDepthM"
+              type="number"
+              min="1"
+              max="30"
+              step="0.1"
+              value="16.0"
+            />
+            <span>m</span>
+          </span>
+        </label>
+        <label class="field-row">
+          <span>Eye height</span>
+          <span class="field-with-unit">
+            <input id="eyeHeightM" type="number" min="0.5" max="2.3" step="0.01" value="1.60" />
+            <span>m</span>
+          </span>
+        </label>
+        <label class="field-row">
+          <span>Room brightness</span>
+          <span class="field-with-unit">
+            <input id="roomBrightness" type="number" min="0.4" max="2.5" step="0.05" value="1.25" />
+            <span>×</span>
+          </span>
+        </label>
+      </section>
+
+      <section class="panel-section">
+        <h2>Add object</h2>
+        <label>
+          <span class="label-text">Type</span>
+          <select id="newObjectType">
+            <option value="letter">Letter / text</option>
+            <option value="square">Square</option>
+            <option value="circle">Circle</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </label>
+        <label>
+          <span class="label-text">Text</span>
+          <input id="newObjectText" type="text" value="A" maxlength="12" />
+        </label>
+        <label>
+          <span class="label-text">Color</span>
+          <input id="newObjectColor" type="color" value="#111111" />
+        </label>
+        <button id="addObjectBtn" class="button primary full-width" type="button">Add object</button>
+      </section>
+    </aside>
+
+    <section class="viewport-column">
+      <div class="viewport-card">
+        <div class="viewport-toolbar">
+          <div>
+            <span class="status-dot" id="focusStatusDot"></span>
+            <strong id="focusStatusText">Focus: —</strong>
+          </div>
+          <div class="toolbar-note">Click an object to select it</div>
+        </div>
+        <div id="viewport" class="viewport" aria-label="3D room simulation"></div>
+        <div id="viewportMessage" class="viewport-message" hidden></div>
+      </div>
+
+      <div class="depth-card">
+        <div class="depth-header">
+          <div>
+            <h2>Depth layout</h2>
+            <p>Side-on schematic; horizontal position represents distance from the viewer.</p>
+          </div>
+          <div class="legend">
+            <span><i class="legend-marker focus"></i> focused</span>
+            <span><i class="legend-marker selected"></i> selected</span>
+          </div>
+        </div>
+        <canvas id="depthCanvas" width="900" height="190" aria-label="Depth schematic"></canvas>
+      </div>
+    </section>
+
+    <aside class="panel object-panel" aria-label="Object editor">
+      <section class="panel-section">
+        <h2>Objects</h2>
+        <div id="objectList" class="object-list"></div>
+      </section>
+
+      <section class="panel-section" id="selectedObjectSection">
+        <div class="section-heading-row">
+          <h2>Selected object</h2>
+          <button id="deleteObjectBtn" class="icon-button danger" type="button" title="Delete selected object">Delete</button>
+        </div>
+
+        <label>
+          <span class="label-text">Name</span>
+          <input id="objName" type="text" maxlength="24" />
+        </label>
+
+        <label id="objTextRow">
+          <span class="label-text">Text</span>
+          <input id="objText" type="text" maxlength="12" />
+        </label>
+
+        <label>
+          <span class="label-text">Sizing mode</span>
+          <select id="sizeLockMode">
+            <option value="physical">Lock physical size</option>
+            <option value="visual">Lock visual angle</option>
+          </select>
+        </label>
+
+        <label>
+          <span class="label-text">Object color</span>
+          <input id="objColor" type="color" value="#111111" />
+        </label>
+
+        <div class="two-col">
+          <label>
+            <span class="label-text">Width</span>
+            <span class="field-with-unit stacked">
+              <input id="objWidthCm" type="number" min="0.1" max="500" step="0.1" />
+              <span>cm</span>
+            </span>
+          </label>
+          <label>
+            <span class="label-text">Height</span>
+            <span class="field-with-unit stacked">
+              <input id="objHeightCm" type="number" min="0.1" max="500" step="0.1" />
+              <span>cm</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            <span class="label-text">Horizontal angle</span>
+            <span class="field-with-unit stacked">
+              <input id="objAngleXDeg" type="number" min="0.01" max="90" step="0.01" />
+              <span>deg</span>
+            </span>
+          </label>
+          <label>
+            <span class="label-text">Vertical angle</span>
+            <span class="field-with-unit stacked">
+              <input id="objAngleYDeg" type="number" min="0.01" max="90" step="0.01" />
+              <span>deg</span>
+            </span>
+          </label>
+        </div>
+
+        <label class="field-row">
+          <span>Distance from viewer</span>
+          <span class="field-with-unit">
+            <input id="objDistanceM" type="number" min="0.15" max="5.95" step="0.01" />
+            <span>m</span>
+          </span>
+        </label>
+
+        <label class="field-row">
+        <span>Horizontal position</span>
+        <span class="field-with-unit">
+          <input
+            id="objXDeg"
+            type="number"
+            step="0.1"
+          />
+          <span>deg</span>
+        </span>
+      </label>
+
+      <label class="field-row">
+        <span>Vertical position</span>
+        <span class="field-with-unit">
+          <input
+            id="objYDeg"
+            type="number"
+            step="0.1"
+          />
+          <span>deg</span>
+        </span>
+      </label>
+
+        <button id="setFocusBtn" class="button primary full-width" type="button">Set selected object as focus</button>
+      </section>
+
+      <section class="panel-section">
+        <h2>Optical readout</h2>
+        <div class="readout-grid">
+          <div><span>Focus distance</span><strong id="focusDistanceReadout">—</strong></div>
+          <div><span>Accommodation</span><strong id="focusDiopterReadout">—</strong></div>
+          <div><span>Selected ΔD</span><strong id="deltaDiopterReadout">—</strong></div>
+          <div><span>Blur diameter</span><strong id="blurArcminReadout">—</strong></div>
+          <div><span>Relative disparity</span><strong id="disparityDegReadout">—</strong></div>
+          <div><span>Approx separation</span><strong id="disparityPxReadout">—</strong></div>
+        </div>
+        <p class="helper formula-note">
+          Defocus uses ΔD = 1/z<sub>object</sub> − 1/z<sub>focus</sub>. Approximate blur diameter uses β ≈ pupil × |ΔD|. Relative binocular disparity uses IPD × ΔD for small angles.
+        </p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="app-footer">
+    <strong>Important:</strong> this is a display simulation. It can model retinal image blur and binocular image separation, but a conventional monitor cannot physically change the eye's accommodation demand away from the screen plane.
+  </footer>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

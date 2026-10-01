@@ -1,0 +1,109 @@
+---
+const pathname = Astro.url.pathname;
+
+const links = [
+  { name: "Home", href: "/" },
+  { name: "Research", href: "/research" },
+  { name: "Publications", href: "/publications" },
+  { name: "Tools", href: "/tools" },
+  { name: "Contact", href: "/contact" },
+];
+
+function isActive(href: string) {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname.startsWith(href);
+}
+---
+
+<header>
+  <div class="top-banner"></div>
+
+  <div class="nav-bar">
+    <nav aria-label="Main navigation">
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            class:list={["nav-link", { active: isActive(link.href) }]}
+          >
+            {link.name}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+</header>
+
+<style>
+  .top-banner {
+    width: 100%;
+    height: 82px;
+    background: #F0E8D8;
+  }
+
+  .nav-bar {
+    width: 100%;
+    background: #324C63;
+  }
+
+  nav {
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(28px, 5vw, 68px);
+    padding: 0 24px;
+  }
+
+  .nav-link {
+    position: relative;
+    padding: 21px 0 18px;
+
+    color: #F0E8D8;
+
+    font-size: 1.05rem;
+    font-weight: 700;
+
+    white-space: nowrap;
+  }
+
+  .nav-link:hover {
+    color: #ffffff;
+  }
+
+  .nav-link.active {
+    color: #F0E8D8;
+  }
+
+  .nav-link.active::after {
+    content: "";
+    position: absolute;
+
+    left: 0;
+    right: 0;
+    bottom: 11px;
+
+    height: 2px;
+
+    background: #F0E8D8;
+  }
+
+  @media (max-width: 650px) {
+    .top-banner {
+      height: 58px;
+    }
+
+    nav {
+      justify-content: flex-start;
+      gap: 25px;
+      overflow-x: auto;
+    }
+
+    .nav-link {
+      font-size: 0.95rem;
+    }
+  }
+</style>

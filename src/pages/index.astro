@@ -1,0 +1,226 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="Federico Sorcini"
+  description="Vision science research, publications, and interactive scientific tools by Federico Sorcini."
+>
+  <section class="bio-section">
+    <div class="container bio-inner">
+
+      <h1>Federico Sorcini</h1>
+
+      <div class="bio-copy">
+        <p>
+          I am a researcher interested in vision science, visual perception,
+          attention, and psychophysiology.
+        </p>
+
+        <p>
+          My work focuses on understanding how characteristics of the visual
+          environment influence perception and attention, with particular
+          interests in depth, perceptual load, and the relationship between
+          behavioral and physiological measures.
+        </p>
+      </div>
+
+      <div class="bio-links">
+        <a class="button" href="/research">
+          View research
+        </a>
+
+        <a class="button secondary" href="/tools">
+          Explore tools
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow">Selected work</p>
+
+      <h2>Research</h2>
+
+      <div class="card-grid">
+        <article class="card">
+          <p class="project-type">Vision Science</p>
+
+          <h3>Visual Attention & Real Depth</h3>
+
+          <p>
+            Experimental research examining how depth relationships within
+            visual scenes influence attention, distractor processing, and
+            perceptual load.
+          </p>
+
+          <a class="card-link" href="/research">
+            Explore project →
+          </a>
+        </article>
+
+        <article class="card">
+          <p class="project-type">Psychophysiology</p>
+
+          <h3>Behavioral & Physiological Measures</h3>
+
+          <p>
+            Research integrating behavioral measures with physiological
+            signals to better understand visual attention and perceptual
+            processing.
+          </p>
+
+          <a class="card-link" href="/research">
+            Explore research →
+          </a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-cream">
+    <div class="container tools-section">
+      <div class="tools-copy">
+        <p class="eyebrow">Interactive projects</p>
+
+        <h2>Tools</h2>
+
+        <p class="lead">
+          Interactive scientific tools for exploring concepts in visual
+          perception, experimental design, and quantitative methods.
+        </p>
+      </div>
+
+      <div class="featured-tool">
+        <p class="project-type">Interactive visualization</p>
+
+        <h3>Real Depth Simulator</h3>
+
+        <p>
+          Explore how focal distance, visual angle, defocus, and binocular
+          disparity change across three-dimensional visual scenes.
+        </p>
+
+        <a class="card-link" href="/tools">
+          Explore tools →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container publication-section">
+      <div>
+        <p class="eyebrow">Academic work</p>
+
+        <h2>Publications & Presentations</h2>
+
+        <p class="lead">
+          Publications, conference presentations, posters, and other research
+          contributions in vision science and related areas.
+        </p>
+      </div>
+
+      <a class="button secondary" href="/publications">
+        View publications
+      </a>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .bio-section {
+    padding: 92px 0 100px;
+    background: #F0E8D8;
+  }
+
+  .bio-inner {
+    max-width: 1120px;
+  }
+
+  .bio-section h1 {
+    margin-bottom: 32px;
+  }
+
+  ..bio-copy {
+    max-width: 760px;
+
+    color: #44535F;
+
+    font-size: 1.18rem;
+    line-height: 1.9;
+  }
+
+  .bio-copy p {
+    margin-bottom: 17px;
+  }
+
+  .bio-links {
+    display: flex;
+    flex-wrap: wrap;
+
+    gap: 12px;
+
+    margin-top: 34px;
+  }
+
+  .project-type {
+    margin-bottom: 7px;
+
+    color: #324C63 !important;
+
+    font-size: 0.76rem;
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tools-section {
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 80px;
+
+    align-items: center;
+  }
+
+  .featured-tool {
+    padding: 32px;
+
+    border-left: 4px solid #324C63;
+
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .featured-tool p {
+    color: #66717A;
+  }
+
+  .publication-section {
+    display: flex;
+
+    align-items: flex-end;
+    justify-content: space-between;
+
+    gap: 50px;
+  }
+
+  @media (max-width: 760px) {
+    .bio-section {
+      padding: 65px 0 70px;
+    }
+
+    .tools-section {
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+
+    .publication-section {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>

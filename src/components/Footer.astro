@@ -1,0 +1,45 @@
+<footer>
+  <div class="footer-inner">
+    <div>
+      <strong>Federico Sorcini</strong>
+    </div>
+
+    <p class="copyright">
+      © {new Date().getFullYear()} Federico Sorcini
+    </p>
+  </div>
+</footer>
+
+<style>
+  footer {
+    background: #324C63;
+    color: white;
+  }
+
+  .footer-inner {
+    width: min(1120px, calc(100% - 40px));
+    margin: 0 auto;
+    min-height: 150px;
+    padding: 40px 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    align-items: flex-end;
+  }
+
+  footer p {
+    margin: 5px 0 0;
+    color: rgba(255,255,255,0.68);
+  }
+
+  .copyright {
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 650px) {
+    .footer-inner {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>
