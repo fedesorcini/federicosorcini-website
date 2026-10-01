@@ -1043,7 +1043,7 @@ function loadDefaultScene() {
     type: 'letter',
     text: 'A',
     name: 'A',
-    distanceM: 2.0,
+    distanceM: 0.4,
     positionXDeg: -6.5,
     positionYDeg: 0.0,
     lockMode: 'visual',
