@@ -108,6 +108,8 @@ let fullScreenScene;
 let fullScreenCamera;
 let fullScreenQuad;
 let compositeMaterial;
+let roomDepthMaterial;
+let roomBlurMaterial;
 let rendererBackend = 'unknown';
 
 const STIMULUS_FOCUS_TOL_D = 0.002;
@@ -254,14 +256,137 @@ function createScene() {
 }
 
 function createPostProcessing() {
-  // Defocus is now applied to each stimulus texture before the stimulus is
-  // drawn into the 3D scene. Post-processing is retained only for the
-  // left/right-eye overlay used by the diplopia simulation.
+  // Stimulus defocus is baked into each object's transparent texture.
+  // The room is different: its walls/floor/ceiling span many depths, so we
+  // render a room-only depth map and apply a depth-dependent blur per pixel.
+  // The same fullscreen pass infrastructure is then reused for diplopia.
   fullScreenScene = new THREE.Scene();
   fullScreenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   fullScreenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
   fullScreenQuad.frustumCulled = false;
   fullScreenScene.add(fullScreenQuad);
+
+  roomDepthMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uFar: { value: 50.0 },
+    },
+    vertexShader: `
+      varying float vViewDepth;
+
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vViewDepth = max(0.0, -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform float uFar;
+      varying float vViewDepth;
+
+      void main() {
+        // Pack normalized linear depth into two 8-bit color channels.
+        // This stays compatible with the simulator's WebGL 1 fallback.
+        float normalizedDepth = clamp(vViewDepth / max(uFar, 0.001), 0.0, 1.0);
+        float scaled = normalizedDepth * 255.0;
+        float hi = floor(scaled) / 255.0;
+        float lo = fract(scaled);
+        gl_FragColor = vec4(hi, lo, 0.0, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+    depthTest: true,
+    depthWrite: true,
+  });
+
+  roomBlurMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tColor: { value: null },
+      tDepth: { value: null },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uFocusDistance: { value: 1.0 },
+      uPupilM: { value: 0.004 },
+      uFocalPx: { value: 1000.0 },
+      uMaxBlurPx: { value: 24.0 },
+      uFar: { value: 50.0 },
+      uBlurEnabled: { value: 1.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position.xy, 0.0, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+
+      uniform sampler2D tColor;
+      uniform sampler2D tDepth;
+      uniform vec2 uResolution;
+      uniform float uFocusDistance;
+      uniform float uPupilM;
+      uniform float uFocalPx;
+      uniform float uMaxBlurPx;
+      uniform float uFar;
+      uniform float uBlurEnabled;
+      varying vec2 vUv;
+
+      float decodeLinearDepth(vec4 packedDepth) {
+        float normalizedDepth = packedDepth.r + packedDepth.g / 255.0;
+        return normalizedDepth * uFar;
+      }
+
+      float opticalBlurRadiusPx(float depthM) {
+        if (uBlurEnabled < 0.5) return 0.0;
+
+        float objectDepth = max(depthM, 0.05);
+        float focusDepth = max(uFocusDistance, 0.05);
+        float deltaD = abs((1.0 / objectDepth) - (1.0 / focusDepth));
+        if (deltaD < ${STIMULUS_FOCUS_TOL_D.toFixed(6)}) return 0.0;
+
+        float blurDiameterRad = uPupilM * deltaD;
+        float blurDiameterPx = 2.0 * uFocalPx * tan(blurDiameterRad * 0.5);
+        return min(0.5 * blurDiameterPx, uMaxBlurPx);
+      }
+
+      void main() {
+        vec4 centerColor = texture2D(tColor, vUv);
+        float depthM = decodeLinearDepth(texture2D(tDepth, vUv));
+        float radiusPx = opticalBlurRadiusPx(depthM);
+
+        if (radiusPx < 0.35) {
+          gl_FragColor = centerColor;
+          return;
+        }
+
+        vec2 texel = 1.0 / max(uResolution, vec2(1.0));
+        vec4 sum = centerColor * 1.5;
+        float totalWeight = 1.5;
+
+        // A fixed golden-angle disc gives a smooth, roughly circular blur while
+        // allowing every pixel to use its own optical blur radius.
+        for (int i = 0; i < 32; i++) {
+          float fi = float(i) + 0.5;
+          float radial = sqrt(fi / 32.0);
+          float angle = fi * 2.39996323;
+          vec2 direction = vec2(cos(angle), sin(angle));
+          vec2 sampleUv = clamp(
+            vUv + direction * radial * radiusPx * texel,
+            vec2(0.0),
+            vec2(1.0)
+          );
+          float weight = exp(-1.7 * radial * radial);
+          sum += texture2D(tColor, sampleUv) * weight;
+          totalWeight += weight;
+        }
+
+        gl_FragColor = sum / totalWeight;
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+  });
 
   compositeMaterial = new THREE.ShaderMaterial({
     uniforms: {
@@ -313,11 +438,25 @@ function makeSceneTarget(width, height) {
   return target;
 }
 
+function makeRoomDepthTarget(width, height) {
+  const target = new THREE.WebGLRenderTarget(width, height, {
+    // Packed depth should be sampled exactly; linear filtering can mix the
+    // two packed channels across geometry boundaries.
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    format: THREE.RGBAFormat,
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+  target.texture.generateMipmaps = false;
+  return target;
+}
+
 function resizeRenderTargets(renderWidth, renderHeight) {
   const same = renderTargets.width === renderWidth && renderTargets.height === renderHeight;
   if (same) return;
 
-  for (const key of ['left', 'right']) {
+  for (const key of ['left', 'right', 'roomColor', 'roomDepth']) {
     disposeRenderTarget(renderTargets[key]);
   }
 
@@ -326,6 +465,8 @@ function resizeRenderTargets(renderWidth, renderHeight) {
     height: renderHeight,
     left: makeSceneTarget(renderWidth, renderHeight),
     right: makeSceneTarget(renderWidth, renderHeight),
+    roomColor: makeSceneTarget(renderWidth, renderHeight),
+    roomDepth: makeRoomDepthTarget(renderWidth, renderHeight),
   };
 }
 
@@ -990,10 +1131,84 @@ function updateCameraAndCalibration() {
   markDirty();
 }
 
-function renderSceneToTarget(cam, target) {
-  renderer.setRenderTarget(target);
-  renderer.clear();
+function renderRoomScratch(cam) {
+  if (!renderTargets.roomColor || !renderTargets.roomDepth) return false;
+
+  const oldObjectVisible = objectRoot.visible;
+  const oldOverrideMaterial = scene.overrideMaterial;
+  const oldBackground = scene.background;
+  const oldClearColor = renderer.getClearColor(new THREE.Color()).clone();
+  const oldClearAlpha = renderer.getClearAlpha();
+
+  objectRoot.visible = false;
+
+  // First render the visible room colors normally.
+  renderer.setRenderTarget(renderTargets.roomColor);
+  renderer.clear(true, true, true);
   renderer.render(scene, cam);
+
+  // Then render only room geometry into a packed, linear-depth texture.
+  // Clear to the far plane so pixels with only the scene background behave
+  // like distant room/background pixels rather than near geometry.
+  scene.background = null;
+  scene.overrideMaterial = roomDepthMaterial;
+  roomDepthMaterial.uniforms.uFar.value = cam.far;
+  renderer.setClearColor(0xffffff, 1);
+  renderer.setRenderTarget(renderTargets.roomDepth);
+  renderer.clear(true, true, true);
+  renderer.render(scene, cam);
+
+  scene.overrideMaterial = oldOverrideMaterial;
+  scene.background = oldBackground;
+  objectRoot.visible = oldObjectVisible;
+  renderer.setClearColor(oldClearColor, oldClearAlpha);
+
+  return true;
+}
+
+function renderBlurredRoom(cam, target) {
+  if (!renderRoomScratch(cam)) return;
+
+  const optics = currentOptics();
+  const focus = focusedObject();
+  const dpr = renderer.getPixelRatio();
+
+  roomBlurMaterial.uniforms.tColor.value = renderTargets.roomColor.texture;
+  roomBlurMaterial.uniforms.tDepth.value = renderTargets.roomDepth.texture;
+  roomBlurMaterial.uniforms.uResolution.value.set(renderTargets.width, renderTargets.height);
+  roomBlurMaterial.uniforms.uFocusDistance.value = focus?.distanceM ?? 1.0;
+  roomBlurMaterial.uniforms.uPupilM.value = optics.pupilM;
+  roomBlurMaterial.uniforms.uFocalPx.value = calibration.focalPxCss * dpr;
+  roomBlurMaterial.uniforms.uMaxBlurPx.value = optics.maxBlurPx * dpr;
+  roomBlurMaterial.uniforms.uFar.value = cam.far;
+  roomBlurMaterial.uniforms.uBlurEnabled.value = optics.blur && focus ? 1.0 : 0.0;
+
+  fullScreenQuad.material = roomBlurMaterial;
+  renderer.setRenderTarget(target);
+  renderer.clear(true, true, true);
+  renderer.render(fullScreenScene, fullScreenCamera);
+}
+
+function renderObjectsOverRoom(cam, target) {
+  const oldRoomVisible = roomGroup.visible;
+  const oldBackground = scene.background;
+  const oldAutoClear = renderer.autoClear;
+
+  roomGroup.visible = false;
+  scene.background = null;
+  renderer.autoClear = false;
+  renderer.setRenderTarget(target);
+  renderer.clearDepth();
+  renderer.render(scene, cam);
+
+  renderer.autoClear = oldAutoClear;
+  scene.background = oldBackground;
+  roomGroup.visible = oldRoomVisible;
+}
+
+function renderEyeView(cam, target) {
+  renderBlurredRoom(cam, target);
+  renderObjectsOverRoom(cam, target);
 }
 
 function renderFrame() {
@@ -1007,22 +1222,20 @@ function renderFrame() {
   leftCamera.position.set(-optics.ipdM / 2, room.eyeHeightM, 0);
   rightCamera.position.set(optics.ipdM / 2, room.eyeHeightM, 0);
 
-  // Defocus is already baked into each stimulus texture. For a normal
-  // monocular view, render the 3D scene directly to the screen; the room stays
-  // sharp while each stimulus carries its own calculated blur.
+  // Stimuli carry their own precomputed defocus. The room is rendered through
+  // a depth-aware blur pass so its walls, floor, ceiling, and edge features
+  // defocus according to their distance from the current fixation plane.
   if (!optics.diplopia || !focus) {
-    renderer.setRenderTarget(null);
-    renderer.clear();
-    renderer.render(scene, camera);
+    renderEyeView(camera, null);
     return;
   }
 
   if (!renderTargets.left || !renderTargets.right) return;
 
-  // Diplopia remains a left/right-eye scene render aligned at the fixation
-  // distance. The same pre-blurred stimulus textures appear in both eyes.
-  renderSceneToTarget(leftCamera, renderTargets.left);
-  renderSceneToTarget(rightCamera, renderTargets.right);
+  // For diplopia, build each eye independently (blurred room + pre-blurred
+  // stimuli), then align the two eye images at the fixation distance.
+  renderEyeView(leftCamera, renderTargets.left);
+  renderEyeView(rightCamera, renderTargets.right);
 
   const focalPxRender = calibration.focalPxCss * renderer.getPixelRatio();
   const focusDisparityPx = focalPxRender * optics.ipdM / focus.distanceM;
