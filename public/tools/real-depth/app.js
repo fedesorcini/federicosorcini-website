@@ -393,6 +393,8 @@ function createPostProcessing() {
       tLeft: { value: null },
       tRight: { value: null },
       uHalfShiftUv: { value: 0.0 },
+      uVisibleScaleX: { value: 1.0 },
+      uVisibleOffsetX: { value: 0.0 },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -406,15 +408,21 @@ function createPostProcessing() {
       uniform sampler2D tLeft;
       uniform sampler2D tRight;
       uniform float uHalfShiftUv;
+      uniform float uVisibleScaleX;
+      uniform float uVisibleOffsetX;
       varying vec2 vUv;
 
       void main() {
-        // Do not clamp shifted UVs at the display boundary. Clamp-to-edge would
-        // repeat the last pixel column across the missing part of an eye view;
-        // if a near object touches that edge, this appears as a large colored
-        // smear. Instead, clip the eye view that has shifted offscreen.
-        float xL = vUv.x + uHalfShiftUv;
-        float xR = vUv.x - uHalfShiftUv;
+        // Each eye is rendered to a horizontally overscanned texture that is
+        // wider than the actual viewport. First map the visible viewport into
+        // the centered crop of that wider texture, then apply the fixation
+        // alignment shift. This lets diplopic content come in naturally from
+        // outside the visible frame instead of smearing or being cut off at
+        // the render-target edge.
+        float baseX = uVisibleOffsetX + vUv.x * uVisibleScaleX;
+        float xL = baseX + uHalfShiftUv;
+        float xR = baseX - uHalfShiftUv;
+
         bool validL = xL >= 0.0 && xL <= 1.0;
         bool validR = xR >= 0.0 && xR <= 1.0;
 
@@ -427,8 +435,6 @@ function createPostProcessing() {
         } else if (validR) {
           gl_FragColor = texture2D(tRight, vec2(xR, vUv.y));
         } else {
-          // This should only be reachable for an extreme shift larger than
-          // half the viewport width.
           gl_FragColor = vec4(0.827, 0.859, 0.894, 1.0);
         }
       }
@@ -469,8 +475,13 @@ function makeRoomDepthTarget(width, height) {
   return target;
 }
 
-function resizeRenderTargets(renderWidth, renderHeight) {
-  const same = renderTargets.width === renderWidth && renderTargets.height === renderHeight;
+function resizeRenderTargets(viewportWidth, renderHeight, overscanPx = 0) {
+  const padPx = Math.max(0, Math.ceil(overscanPx));
+  const targetWidth = Math.max(1, viewportWidth + padPx * 2);
+  const same =
+    renderTargets.viewportWidth === viewportWidth &&
+    renderTargets.height === renderHeight &&
+    renderTargets.overscanPx === padPx;
   if (same) return;
 
   for (const key of ['left', 'right', 'roomColor', 'roomDepth']) {
@@ -478,13 +489,34 @@ function resizeRenderTargets(renderWidth, renderHeight) {
   }
 
   renderTargets = {
-    width: renderWidth,
+    // width is the actual offscreen render width. viewportWidth is the center
+    // crop that is ultimately shown to the user.
+    width: targetWidth,
+    viewportWidth,
     height: renderHeight,
-    left: makeSceneTarget(renderWidth, renderHeight),
-    right: makeSceneTarget(renderWidth, renderHeight),
-    roomColor: makeSceneTarget(renderWidth, renderHeight),
-    roomDepth: makeRoomDepthTarget(renderWidth, renderHeight),
+    overscanPx: padPx,
+    left: makeSceneTarget(targetWidth, renderHeight),
+    right: makeSceneTarget(targetWidth, renderHeight),
+    roomColor: makeSceneTarget(targetWidth, renderHeight),
+    roomDepth: makeRoomDepthTarget(targetWidth, renderHeight),
   };
+}
+
+function diplopiaOverscanPx(focus, optics) {
+  if (!renderer || !focus) return 0;
+
+  const dpr = renderer.getPixelRatio();
+  const focalPxRender = calibration.focalPxCss * dpr;
+
+  // The final binocular composite translates each complete eye image by half
+  // the fixation disparity. The offscreen eye render therefore needs at least
+  // that much extra image on both sides. Add enough extra margin for the
+  // largest permitted blur halo so blurred stimuli/room edges can also enter
+  // the visible crop cleanly.
+  const halfFocusShiftPx = 0.5 * focalPxRender * optics.ipdM / Math.max(focus.distanceM, 0.05);
+  const blurSafetyPx = optics.blur ? (3 * optics.maxBlurPx * dpr + 4 * dpr) : (4 * dpr);
+
+  return Math.ceil(halfFocusShiftPx + blurSafetyPx);
 }
 
 function disposeObject3D(root) {
@@ -1160,7 +1192,7 @@ function updateCameraAndCalibration() {
   const renderWidth = Math.max(1, Math.round(width * dpr));
   const renderHeight = Math.max(1, Math.round(height * dpr));
   renderer.setSize(width, height, false);
-  resizeRenderTargets(renderWidth, renderHeight);
+  resizeRenderTargets(renderWidth, renderHeight, 0);
 
   // Texture resolution and rendered blur are calibrated in screen pixels, so
   // regenerate stimulus textures whenever display calibration changes.
@@ -1255,6 +1287,8 @@ function renderFrame() {
   const room = currentRoom();
   const optics = currentOptics();
   const focus = focusedObject();
+  const viewportRenderWidth = Math.max(1, renderer.domElement.width);
+  const viewportRenderHeight = Math.max(1, renderer.domElement.height);
 
   camera.position.set(0, room.eyeHeightM, 0);
   leftCamera.position.set(-optics.ipdM / 2, room.eyeHeightM, 0);
@@ -1264,24 +1298,46 @@ function renderFrame() {
   // a depth-aware blur pass so its walls, floor, ceiling, and edge features
   // defocus according to their distance from the current fixation plane.
   if (!optics.diplopia || !focus) {
+    // When diplopia is off, render exactly the visible field rather than the
+    // wider stereo buffer used below.
+    resizeRenderTargets(viewportRenderWidth, viewportRenderHeight, 0);
     renderEyeView(camera, null);
     return;
   }
 
+  // Render a wider-than-visible field for each eye. Only the centered viewport
+  // crop is shown at the end. This is analogous to camera overscan: geometry
+  // just outside the display still exists in the eye images and can shift into
+  // view when the two eyes are aligned at fixation.
+  const overscanPx = diplopiaOverscanPx(focus, optics);
+  resizeRenderTargets(viewportRenderWidth, viewportRenderHeight, overscanPx);
+
   if (!renderTargets.left || !renderTargets.right) return;
 
-  // For diplopia, build each eye independently (blurred room + pre-blurred
-  // stimuli), then align the two eye images at the fixation distance.
+  // Keep vertical FOV and pixel scale unchanged while widening only the
+  // horizontal field of the offscreen stereo cameras.
+  const stereoAspect = renderTargets.width / renderTargets.height;
+  for (const cam of [leftCamera, rightCamera]) {
+    if (Math.abs(cam.aspect - stereoAspect) > 1e-9) {
+      cam.aspect = stereoAspect;
+      cam.updateProjectionMatrix();
+    }
+  }
+
   renderEyeView(leftCamera, renderTargets.left);
   renderEyeView(rightCamera, renderTargets.right);
 
   const focalPxRender = calibration.focalPxCss * renderer.getPixelRatio();
-  const focusDisparityPx = focalPxRender * optics.ipdM / focus.distanceM;
+  const focusDisparityPx = focalPxRender * optics.ipdM / Math.max(focus.distanceM, 0.05);
   const halfShiftUv = 0.5 * focusDisparityPx / renderTargets.width;
+  const visibleScaleX = renderTargets.viewportWidth / renderTargets.width;
+  const visibleOffsetX = renderTargets.overscanPx / renderTargets.width;
 
   compositeMaterial.uniforms.tLeft.value = renderTargets.left.texture;
   compositeMaterial.uniforms.tRight.value = renderTargets.right.texture;
   compositeMaterial.uniforms.uHalfShiftUv.value = halfShiftUv;
+  compositeMaterial.uniforms.uVisibleScaleX.value = visibleScaleX;
+  compositeMaterial.uniforms.uVisibleOffsetX.value = visibleOffsetX;
 
   fullScreenQuad.material = compositeMaterial;
   renderer.setRenderTarget(null);
