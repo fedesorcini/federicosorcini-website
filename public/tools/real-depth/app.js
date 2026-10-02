@@ -36,6 +36,7 @@ const els = {
   newGaborFrequencyCpd: null,
   addObjectBtn: $('addObjectBtn'),
   resetSceneBtn: $('resetSceneBtn'),
+  clearSceneBtn: null,
   objectList: $('objectList'),
   objName: $('objName'),
   objTextRow: $('objTextRow'),
@@ -243,6 +244,220 @@ function installStimulusUi() {
   els.objGaborFrequencyCpd = $('objGaborFrequencyCpd');
 
   updateNewObjectControls();
+}
+
+
+function installWorkspaceLayout() {
+  // Reorganize the existing simulator DOM at startup so the HTML file does
+  // not need to be replaced. The Add object panel remains always visible,
+  // while Optics, Display calibration, and Room Options become compact
+  // disclosure sections beneath it.
+  const controlsPanel = document.querySelector('.controls-panel');
+  const objectPanel = document.querySelector('.object-panel');
+
+  const addSection = els.addObjectBtn?.closest('.panel-section');
+  const opticsSection = els.pupilMm?.closest('.panel-section');
+  const displaySection = els.displayWidthCm?.closest('.panel-section');
+  const roomSection = els.roomWidthM?.closest('.panel-section');
+
+  if (controlsPanel && addSection && opticsSection && displaySection && roomSection) {
+    // Explicitly enforce the requested top-to-bottom order.
+    controlsPanel.append(addSection, opticsSection, displaySection, roomSection);
+
+    makeCollapsiblePanelSection(opticsSection, 'Optics', false);
+    makeCollapsiblePanelSection(displaySection, 'Display calibration', false);
+    makeCollapsiblePanelSection(roomSection, 'Room Options', false);
+  }
+
+  // Put the selected-object editor first in the right toolbar. The Objects
+  // list and Optical readout follow it in their existing relative order.
+  if (objectPanel && els.selectedObjectSection) {
+    objectPanel.prepend(els.selectedObjectSection);
+  }
+
+  installSceneActionBar();
+  installWorkspaceLayoutStyles();
+}
+
+function makeCollapsiblePanelSection(section, title, initiallyExpanded = false) {
+  if (!section || section.dataset.collapsibleInstalled === 'true') return;
+
+  const oldHeading = section.querySelector(':scope > h2');
+  const body = document.createElement('div');
+  body.className = 'collapsible-section-body';
+
+  // Move everything except the old heading into the disclosure body.
+  for (const child of [...section.children]) {
+    if (child !== oldHeading) body.appendChild(child);
+  }
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'collapsible-section-toggle';
+  toggle.setAttribute('aria-expanded', initiallyExpanded ? 'true' : 'false');
+
+  const arrow = document.createElement('span');
+  arrow.className = 'collapsible-section-arrow';
+  arrow.setAttribute('aria-hidden', 'true');
+
+  const label = document.createElement('span');
+  label.className = 'collapsible-section-label';
+  label.textContent = title;
+
+  toggle.append(arrow, label);
+
+  const setExpanded = (expanded) => {
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    arrow.textContent = expanded ? '▾' : '▸';
+    body.hidden = !expanded;
+  };
+
+  toggle.addEventListener('click', () => {
+    setExpanded(toggle.getAttribute('aria-expanded') !== 'true');
+  });
+
+  if (oldHeading) oldHeading.remove();
+  section.prepend(toggle);
+  section.appendChild(body);
+  section.classList.add('collapsible-panel-section');
+  section.dataset.collapsibleInstalled = 'true';
+  setExpanded(initiallyExpanded);
+}
+
+function installSceneActionBar() {
+  if (document.getElementById('sceneActionBar')) {
+    els.clearSceneBtn = $('clearSceneBtn');
+    return;
+  }
+
+  const viewportCard = document.querySelector('.viewport-card');
+  if (!viewportCard || !els.viewport || !els.resetSceneBtn) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'sceneActionBar';
+  bar.className = 'scene-action-bar';
+
+  // Move the existing Reset scene button out of the page header and into the
+  // new bar. Keep its id so the existing reset behavior remains unchanged.
+  els.resetSceneBtn.className = 'button scene-reset-button';
+
+  const clearButton = document.createElement('button');
+  clearButton.id = 'clearSceneBtn';
+  clearButton.type = 'button';
+  clearButton.className = 'button scene-clear-button';
+  clearButton.textContent = 'Clear scene';
+  clearButton.title = 'Remove all objects from the scene';
+
+  bar.append(els.resetSceneBtn, clearButton);
+  els.viewport.insertAdjacentElement('afterend', bar);
+  els.clearSceneBtn = clearButton;
+
+  // The old header action wrapper is no longer needed once Reset scene moves.
+  const headerActions = document.querySelector('.header-actions');
+  if (headerActions && headerActions.children.length === 0) headerActions.remove();
+}
+
+function installWorkspaceLayoutStyles() {
+  if (document.getElementById('workspaceLayoutStyles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'workspaceLayoutStyles';
+  style.textContent = `
+    .collapsible-panel-section {
+      padding: 0 !important;
+    }
+
+    .collapsible-section-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin: 0;
+      padding: 1rem;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: 700;
+      line-height: 1.2;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .collapsible-section-toggle:hover {
+      background: color-mix(in srgb, currentColor 7%, transparent);
+    }
+
+    .collapsible-section-toggle:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: -4px;
+    }
+
+    .collapsible-section-arrow {
+      flex: 0 0 1rem;
+      width: 1rem;
+      font-size: 0.95em;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .collapsible-section-label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .collapsible-section-body {
+      padding: 0 1rem 1rem;
+    }
+
+    .collapsible-section-body[hidden] {
+      display: none !important;
+    }
+
+    .scene-action-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.7rem 0.8rem;
+      border-top: 1px solid var(--border, #d8dde4);
+      background: var(--panel, #ffffff);
+    }
+
+    .scene-action-bar .button {
+      width: auto;
+      min-width: 110px;
+    }
+
+    .scene-reset-button {
+      border: 1px solid var(--navy, var(--accent, #324C63));
+      background: var(--navy, var(--accent, #324C63));
+      color: var(--cream, #F0E8D8);
+    }
+
+    .scene-clear-button {
+      border: 1px solid var(--navy, var(--accent, #324C63));
+      background: transparent;
+      color: var(--navy, var(--accent, #324C63));
+    }
+
+    .scene-clear-button:hover,
+    .scene-reset-button:hover {
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 560px) {
+      .scene-action-bar {
+        justify-content: stretch;
+      }
+
+      .scene-action-bar .button {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function normalizedOrientationDeg(value) {
@@ -1314,6 +1529,15 @@ function clearObjects() {
   state.nextId = 1;
 }
 
+
+function clearScene() {
+  stopAllMovementKeys();
+  clearObjects();
+  updateOutlines();
+  refreshUi();
+  markDirty();
+}
+
 function loadDefaultScene() {
   clearObjects();
 
@@ -2191,6 +2415,7 @@ function bindEvents() {
   els.newObjectType.addEventListener('change', updateNewObjectControls);
   els.addObjectBtn.addEventListener('click', addObjectFromControls);
   els.resetSceneBtn.addEventListener('click', resetAll);
+  if (els.clearSceneBtn) els.clearSceneBtn.addEventListener('click', clearScene);
 
   // Free-text fields update live, but do not rewrite the editor while the
   // user is typing, so the caret stays where the user put it.
@@ -2265,6 +2490,7 @@ function init() {
     createScene();
     createPostProcessing();
     installStimulusUi();
+    installWorkspaceLayout();
     bindEvents();
     buildRoom();
     updateCameraAndCalibration();
