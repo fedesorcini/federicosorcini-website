@@ -310,6 +310,7 @@ function createPostProcessing() {
       uMaxBlurPx: { value: 24.0 },
       uFar: { value: 50.0 },
       uBlurEnabled: { value: 1.0 },
+      uOutputToScreen: { value: 0.0 },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -330,7 +331,15 @@ function createPostProcessing() {
       uniform float uMaxBlurPx;
       uniform float uFar;
       uniform float uBlurEnabled;
+      uniform float uOutputToScreen;
       varying vec2 vUv;
+
+      vec3 linearToSRGB(vec3 value) {
+        vec3 v = max(value, vec3(0.0));
+        vec3 low = v * 12.92;
+        vec3 high = 1.055 * pow(v, vec3(1.0 / 2.4)) - 0.055;
+        return mix(low, high, step(vec3(0.0031308), v));
+      }
 
       float decodeLinearDepth(vec4 packedDepth) {
         float normalizedDepth = packedDepth.r + packedDepth.g / 255.0;
@@ -354,34 +363,39 @@ function createPostProcessing() {
         vec4 centerColor = texture2D(tColor, vUv);
         float depthM = decodeLinearDepth(texture2D(tDepth, vUv));
         float radiusPx = opticalBlurRadiusPx(depthM);
+        vec4 outputColor = centerColor;
 
-        if (radiusPx < 0.35) {
-          gl_FragColor = centerColor;
-          return;
+        if (radiusPx >= 0.35) {
+          vec2 texel = 1.0 / max(uResolution, vec2(1.0));
+          vec4 sum = centerColor * 1.5;
+          float totalWeight = 1.5;
+
+          // A fixed golden-angle disc gives a smooth, roughly circular blur while
+          // allowing every pixel to use its own optical blur radius.
+          for (int i = 0; i < 32; i++) {
+            float fi = float(i) + 0.5;
+            float radial = sqrt(fi / 32.0);
+            float angle = fi * 2.39996323;
+            vec2 direction = vec2(cos(angle), sin(angle));
+            vec2 sampleUv = clamp(
+              vUv + direction * radial * radiusPx * texel,
+              vec2(0.0),
+              vec2(1.0)
+            );
+            float weight = exp(-1.7 * radial * radial);
+            sum += texture2D(tColor, sampleUv) * weight;
+            totalWeight += weight;
+          }
+
+          outputColor = sum / totalWeight;
         }
 
-        vec2 texel = 1.0 / max(uResolution, vec2(1.0));
-        vec4 sum = centerColor * 1.5;
-        float totalWeight = 1.5;
-
-        // A fixed golden-angle disc gives a smooth, roughly circular blur while
-        // allowing every pixel to use its own optical blur radius.
-        for (int i = 0; i < 32; i++) {
-          float fi = float(i) + 0.5;
-          float radial = sqrt(fi / 32.0);
-          float angle = fi * 2.39996323;
-          vec2 direction = vec2(cos(angle), sin(angle));
-          vec2 sampleUv = clamp(
-            vUv + direction * radial * radiusPx * texel,
-            vec2(0.0),
-            vec2(1.0)
-          );
-          float weight = exp(-1.7 * radial * radial);
-          sum += texture2D(tColor, sampleUv) * weight;
-          totalWeight += weight;
+        // Offscreen eye buffers stay in linear space. When this shader writes
+        // directly to the visible canvas, encode once for the display.
+        if (uOutputToScreen > 0.5) {
+          outputColor.rgb = linearToSRGB(outputColor.rgb);
         }
-
-        gl_FragColor = sum / totalWeight;
+        gl_FragColor = outputColor;
       }
     `,
     depthTest: false,
@@ -412,6 +426,13 @@ function createPostProcessing() {
       uniform float uVisibleOffsetX;
       varying vec2 vUv;
 
+      vec3 linearToSRGB(vec3 value) {
+        vec3 v = max(value, vec3(0.0));
+        vec3 low = v * 12.92;
+        vec3 high = 1.055 * pow(v, vec3(1.0 / 2.4)) - 0.055;
+        return mix(low, high, step(vec3(0.0031308), v));
+      }
+
       void main() {
         // Each eye is rendered to a horizontally overscanned texture that is
         // wider than the actual viewport. First map the visible viewport into
@@ -426,17 +447,25 @@ function createPostProcessing() {
         bool validL = xL >= 0.0 && xL <= 1.0;
         bool validR = xR >= 0.0 && xR <= 1.0;
 
+        vec4 outputColor;
         if (validL && validR) {
           vec4 leftColor = texture2D(tLeft, vec2(xL, vUv.y));
           vec4 rightColor = texture2D(tRight, vec2(xR, vUv.y));
-          gl_FragColor = 0.5 * (leftColor + rightColor);
+          outputColor = 0.5 * (leftColor + rightColor);
         } else if (validL) {
-          gl_FragColor = texture2D(tLeft, vec2(xL, vUv.y));
+          outputColor = texture2D(tLeft, vec2(xL, vUv.y));
         } else if (validR) {
-          gl_FragColor = texture2D(tRight, vec2(xR, vUv.y));
+          outputColor = texture2D(tRight, vec2(xR, vUv.y));
         } else {
-          gl_FragColor = vec4(0.827, 0.859, 0.894, 1.0);
+          // Linear-space equivalent of scene background #D3DBE4.
+          outputColor = vec4(0.651406, 0.708376, 0.775822, 1.0);
         }
+
+        // The eye render targets contain linear RGB. Convert to sRGB exactly
+        // once when compositing to the visible canvas so colors match the
+        // non-diplopia path instead of appearing artificially dark.
+        outputColor.rgb = linearToSRGB(outputColor.rgb);
+        gl_FragColor = outputColor;
       }
     `,
     depthTest: false,
@@ -1252,6 +1281,7 @@ function renderBlurredRoom(cam, target) {
   roomBlurMaterial.uniforms.uMaxBlurPx.value = optics.maxBlurPx * dpr;
   roomBlurMaterial.uniforms.uFar.value = cam.far;
   roomBlurMaterial.uniforms.uBlurEnabled.value = optics.blur && focus ? 1.0 : 0.0;
+  roomBlurMaterial.uniforms.uOutputToScreen.value = target === null ? 1.0 : 0.0;
 
   fullScreenQuad.material = roomBlurMaterial;
   renderer.setRenderTarget(target);
