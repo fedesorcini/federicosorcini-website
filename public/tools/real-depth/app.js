@@ -409,11 +409,28 @@ function createPostProcessing() {
       varying vec2 vUv;
 
       void main() {
-        vec2 uvL = vec2(clamp(vUv.x + uHalfShiftUv, 0.0, 1.0), vUv.y);
-        vec2 uvR = vec2(clamp(vUv.x - uHalfShiftUv, 0.0, 1.0), vUv.y);
-        vec4 leftColor = texture2D(tLeft, uvL);
-        vec4 rightColor = texture2D(tRight, uvR);
-        gl_FragColor = 0.5 * (leftColor + rightColor);
+        // Do not clamp shifted UVs at the display boundary. Clamp-to-edge would
+        // repeat the last pixel column across the missing part of an eye view;
+        // if a near object touches that edge, this appears as a large colored
+        // smear. Instead, clip the eye view that has shifted offscreen.
+        float xL = vUv.x + uHalfShiftUv;
+        float xR = vUv.x - uHalfShiftUv;
+        bool validL = xL >= 0.0 && xL <= 1.0;
+        bool validR = xR >= 0.0 && xR <= 1.0;
+
+        if (validL && validR) {
+          vec4 leftColor = texture2D(tLeft, vec2(xL, vUv.y));
+          vec4 rightColor = texture2D(tRight, vec2(xR, vUv.y));
+          gl_FragColor = 0.5 * (leftColor + rightColor);
+        } else if (validL) {
+          gl_FragColor = texture2D(tLeft, vec2(xL, vUv.y));
+        } else if (validR) {
+          gl_FragColor = texture2D(tRight, vec2(xR, vUv.y));
+        } else {
+          // This should only be reachable for an extreme shift larger than
+          // half the viewport width.
+          gl_FragColor = vec4(0.827, 0.859, 0.894, 1.0);
+        }
       }
     `,
     depthTest: false,
