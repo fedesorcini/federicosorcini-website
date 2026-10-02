@@ -30,12 +30,16 @@ const els = {
   newObjectType: $('newObjectType'),
   newObjectText: $('newObjectText'),
   newObjectColor: $('newObjectColor'),
+  newGaborOrientationRow: null,
+  newGaborOrientationDeg: null,
   addObjectBtn: $('addObjectBtn'),
   resetSceneBtn: $('resetSceneBtn'),
   objectList: $('objectList'),
   objName: $('objName'),
   objTextRow: $('objTextRow'),
   objText: $('objText'),
+  objGaborOrientationRow: null,
+  objGaborOrientationDeg: null,
   sizeLockMode: $('sizeLockMode'),
   objColor: $('objColor'),
   objWidthCm: $('objWidthCm'),
@@ -144,6 +148,75 @@ function normalizeHexColor(value, fallback = '#111111') {
 
 function markDirty() {
   dirty = true;
+}
+
+function installGaborUi() {
+  // Add Gabor support without requiring a separate HTML replacement. The
+  // controls are inserted into the existing Add object and Selected object
+  // panels at startup.
+  if (!Array.from(els.newObjectType.options).some(option => option.value === 'gabor')) {
+    const option = document.createElement('option');
+    option.value = 'gabor';
+    option.textContent = 'Gabor patch';
+    els.newObjectType.appendChild(option);
+  }
+
+  if (!document.getElementById('newGaborOrientationDeg')) {
+    const row = document.createElement('label');
+    row.id = 'newGaborOrientationRow';
+    row.innerHTML = `
+      <span class="label-text">Orientation</span>
+      <span class="field-with-unit stacked">
+        <input id="newGaborOrientationDeg" type="number" min="0" max="179.9" step="1" value="0" />
+        <span>deg</span>
+      </span>
+      <small class="helper">0° = vertical bars; 90° = horizontal bars</small>
+    `;
+    const textLabel = els.newObjectText.closest('label');
+    if (textLabel) textLabel.insertAdjacentElement('afterend', row);
+  }
+
+  els.newGaborOrientationRow = $('newGaborOrientationRow');
+  els.newGaborOrientationDeg = $('newGaborOrientationDeg');
+
+  if (!document.getElementById('objGaborOrientationDeg')) {
+    const row = document.createElement('label');
+    row.id = 'objGaborOrientationRow';
+    row.innerHTML = `
+      <span class="label-text">Gabor orientation</span>
+      <span class="field-with-unit stacked">
+        <input id="objGaborOrientationDeg" type="number" min="0" max="179.9" step="1" />
+        <span>deg</span>
+      </span>
+      <small class="helper">0° = vertical bars; 90° = horizontal bars</small>
+    `;
+    els.objTextRow.insertAdjacentElement('afterend', row);
+  }
+
+  els.objGaborOrientationRow = $('objGaborOrientationRow');
+  els.objGaborOrientationDeg = $('objGaborOrientationDeg');
+
+  updateNewObjectControls();
+}
+
+function normalizedOrientationDeg(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return ((n % 180) + 180) % 180;
+}
+
+function updateNewObjectControls() {
+  const type = els.newObjectType.value;
+  const isLetter = type === 'letter';
+  const isGabor = type === 'gabor';
+
+  els.newObjectText.disabled = !isLetter;
+  if (els.newGaborOrientationRow) els.newGaborOrientationRow.style.display = isGabor ? 'block' : 'none';
+  if (els.newGaborOrientationDeg) els.newGaborOrientationDeg.disabled = !isGabor;
+
+  // The current Gabor implementation is achromatic, so color is intentionally
+  // not applied to it. Keep the color picker available for the other stimuli.
+  if (els.newObjectColor) els.newObjectColor.disabled = isGabor;
 }
 
 function showViewportMessage(message) {
@@ -746,6 +819,55 @@ function objectOpticalBlurRadiusRenderPx(obj) {
   return clamp(opticalRadiusPx, 0, maxRadiusPx);
 }
 
+function makeGaborSourceCanvas(orientationDeg, widthPx, heightPx) {
+  // Build the carrier at a bounded source resolution and then scale it to the
+  // requested stimulus size. This keeps repeated texture regeneration fast
+  // when an object is moved in depth while preserving the same cycles/patch.
+  const maxSourceDim = 512;
+  const scale = Math.min(1, maxSourceDim / Math.max(widthPx, heightPx));
+  const sourceWidth = Math.max(64, Math.round(widthPx * scale));
+  const sourceHeight = Math.max(64, Math.round(heightPx * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = sourceWidth;
+  canvas.height = sourceHeight;
+
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(sourceWidth, sourceHeight);
+  const data = image.data;
+
+  // Orientation is the visible bar orientation. With 0°, luminance varies
+  // horizontally and therefore produces vertical bars; 90° gives horizontal.
+  const theta = degToRad(normalizedOrientationDeg(orientationDeg));
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  const minDim = Math.max(1, Math.min(sourceWidth, sourceHeight));
+  const cyclesPerPatch = 4.0;
+  const sigma = 0.22; // Gaussian sigma in units of the patch's short dimension.
+
+  for (let y = 0; y < sourceHeight; y++) {
+    const ny = (y + 0.5 - sourceHeight / 2) / minDim;
+    for (let x = 0; x < sourceWidth; x++) {
+      const nx = (x + 0.5 - sourceWidth / 2) / minDim;
+      const carrierCoord = nx * cosT + ny * sinT;
+      const carrier = Math.cos(2 * Math.PI * cyclesPerPatch * carrierCoord);
+      const gaussian = Math.exp(-0.5 * (nx * nx + ny * ny) / (sigma * sigma));
+
+      // Mean-gray sinusoid under a Gaussian alpha envelope. The transparent
+      // envelope lets the room/stimuli behind the patch remain visible.
+      const luminance = Math.round(255 * (0.5 + 0.5 * carrier));
+      const alpha = Math.round(255 * gaussian);
+      const i = (y * sourceWidth + x) * 4;
+      data[i] = luminance;
+      data[i + 1] = luminance;
+      data[i + 2] = luminance;
+      data[i + 3] = alpha;
+    }
+  }
+
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
 function makeSharpStimulusCanvas(obj, widthPx, heightPx) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, widthPx);
@@ -765,6 +887,12 @@ function makeSharpStimulusCanvas(obj, widthPx, heightPx) {
       source.sx, source.sy, source.sw, source.sh,
       0, 0, canvas.width, canvas.height
     );
+    return canvas;
+  }
+
+  if (obj.type === 'gabor') {
+    const source = makeGaborSourceCanvas(obj.orientationDeg ?? 0, canvas.width, canvas.height);
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
     return canvas;
   }
 
@@ -1045,6 +1173,7 @@ function newObject({
   heightM = 0.05,
   angleXDeg = 3,
   angleYDeg = 3,
+  orientationDeg = 0,
 }) {
   const id = state.nextId++;
 
@@ -1069,6 +1198,7 @@ function newObject({
     heightM,
     angleXDeg,
     angleYDeg,
+    orientationDeg: normalizedOrientationDeg(orientationDeg),
     group: null,
     visualMesh: null,
     pickMesh: null,
@@ -1441,7 +1571,7 @@ function refreshObjectList() {
     button.textContent = obj.name;
     const meta = document.createElement('span');
     meta.className = 'meta';
-    meta.textContent = `${obj.distanceM.toFixed(2)} m · ${obj.angleXDeg.toFixed(2)}° × ${obj.angleYDeg.toFixed(2)}°`;
+    meta.textContent = `${obj.distanceM.toFixed(2)} m · ${obj.angleXDeg.toFixed(2)}° × ${obj.angleYDeg.toFixed(2)}°${obj.type === 'gabor' ? ` · ori ${obj.orientationDeg.toFixed(1)}°` : ''}`;
     button.appendChild(meta);
     button.addEventListener('click', () => selectObject(obj.id));
     els.objectList.appendChild(button);
@@ -1464,6 +1594,12 @@ function refreshSelectedObjectEditor() {
   els.objName.value = obj.name;
   els.objText.value = obj.text || '';
   els.objTextRow.style.display = obj.type === 'letter' ? 'block' : 'none';
+  if (els.objGaborOrientationRow) {
+    els.objGaborOrientationRow.style.display = obj.type === 'gabor' ? 'block' : 'none';
+  }
+  if (els.objGaborOrientationDeg) {
+    els.objGaborOrientationDeg.value = normalizedOrientationDeg(obj.orientationDeg ?? 0).toFixed(1);
+  }
   els.sizeLockMode.value = obj.lockMode;
   els.objColor.value = normalizeHexColor(obj.color, '#111111');
   els.objWidthCm.value = (obj.widthM * 100).toFixed(2);
@@ -1489,8 +1625,9 @@ function refreshSelectedObjectEditor() {
   els.objAngleYDeg.disabled = physicalLocked;
   els.objName.disabled = false;
   els.objText.disabled = false;
+  if (els.objGaborOrientationDeg) els.objGaborOrientationDeg.disabled = obj.type !== 'gabor';
   els.sizeLockMode.disabled = false;
-  els.objColor.disabled = false;
+  els.objColor.disabled = obj.type === 'gabor';
   els.objDistanceM.disabled = false;
   els.objXDeg.disabled = false;
   els.objYDeg.disabled = false;
@@ -1670,8 +1807,10 @@ function commitSelectedFromEditor(field, { refreshEditor = true } = {}) {
   } else if (field === 'text' && obj.type === 'letter') {
     obj.text = String(els.objText.value || 'A').slice(0, 12);
     if (!obj.text) obj.text = 'A';
-  } else if (field === 'color') {
+  } else if (field === 'color' && obj.type !== 'gabor') {
     obj.color = normalizeHexColor(els.objColor.value, obj.color || '#111111');
+  } else if (field === 'orientation' && obj.type === 'gabor') {
+    obj.orientationDeg = normalizedOrientationDeg(numberValue(els.objGaborOrientationDeg, obj.orientationDeg ?? 0));
   } else if (field === 'lockMode') {
     obj.lockMode = els.sizeLockMode.value === 'visual' ? 'visual' : 'physical';
     syncObjectDimensions(obj);
@@ -1842,6 +1981,9 @@ function addObjectFromControls() {
   const type = els.newObjectType.value;
   const text = safeName(els.newObjectText.value, 'A').slice(0, 12);
   const color = normalizeHexColor(els.newObjectColor.value, '#111111');
+  const orientationDeg = type === 'gabor'
+    ? normalizedOrientationDeg(numberValue(els.newGaborOrientationDeg, 0))
+    : 0;
   const room = currentRoom();
   const baseDistance = focusedObject()?.distanceM ?? Math.min(1.25, room.depthM * 0.4);
   const offsetIndex = state.objects.length % 5;
@@ -1861,6 +2003,7 @@ function addObjectFromControls() {
     heightM: sizeFromAngleM(3, newDistanceM),
     angleXDeg: 3,
     angleYDeg: 3,
+    orientationDeg,
   });
   state.selectedId = obj.id;
   if (!state.focusedId) state.focusedId = obj.id;
@@ -1934,9 +2077,7 @@ function bindEvents() {
     el.addEventListener('change', roomSettingsChanged);
   }
 
-  els.newObjectType.addEventListener('change', () => {
-    els.newObjectText.disabled = els.newObjectType.value !== 'letter';
-  });
+  els.newObjectType.addEventListener('change', updateNewObjectControls);
   els.addObjectBtn.addEventListener('click', addObjectFromControls);
   els.resetSceneBtn.addEventListener('click', resetAll);
 
@@ -1945,6 +2086,9 @@ function bindEvents() {
   els.objName.addEventListener('input', () => commitSelectedFromEditor('name', { refreshEditor: false }));
   els.objText.addEventListener('input', () => commitSelectedFromEditor('text', { refreshEditor: false }));
   els.objColor.addEventListener('input', () => commitSelectedFromEditor('color', { refreshEditor: false }));
+  if (els.objGaborOrientationDeg) {
+    els.objGaborOrientationDeg.addEventListener('change', () => commitSelectedFromEditor('orientation'));
+  }
 
   els.sizeLockMode.addEventListener('change', () => commitSelectedFromEditor('lockMode'));
 
@@ -2006,6 +2150,7 @@ function init() {
   try {
     createScene();
     createPostProcessing();
+    installGaborUi();
     bindEvents();
     buildRoom();
     updateCameraAndCalibration();
