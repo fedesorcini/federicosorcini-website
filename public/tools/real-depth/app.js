@@ -67,9 +67,14 @@ const els = {
   selectedObjectSection: $('selectedObjectSection'),
 };
 
+// Pupil diameter is currently fixed for the public simulator.
+// Set SHOW_PUPIL_DIAMETER_CONTROL to true if you want to expose the control later.
+const FIXED_PUPIL_DIAMETER_MM = 4.0;
+const SHOW_PUPIL_DIAMETER_CONTROL = false;
+
 const DEFAULTS = {
   optics: {
-    pupilMm: 4.0,
+    pupilMm: FIXED_PUPIL_DIAMETER_MM,
     ipdMm: 64,
     blur: true,
     diplopia: false,
@@ -248,6 +253,17 @@ function installStimulusUi() {
 
 
 function installWorkspaceLayout() {
+  // Keep the pupil-diameter control in the DOM/code for a possible later
+  // release, but hide it for now and force the simulation to use 4.0 mm.
+  if (els.pupilMm) {
+    els.pupilMm.value = FIXED_PUPIL_DIAMETER_MM.toFixed(1);
+    const pupilControlRow = els.pupilMm.closest('label') || els.pupilMm.parentElement;
+    if (pupilControlRow) {
+      pupilControlRow.hidden = !SHOW_PUPIL_DIAMETER_CONTROL;
+      pupilControlRow.style.display = SHOW_PUPIL_DIAMETER_CONTROL ? '' : 'none';
+    }
+  }
+
   // Reorganize the existing simulator DOM at startup so the HTML file does
   // not need to be replaced. The Add object panel remains always visible,
   // while Optics, Display calibration, and Room Options become compact
@@ -509,7 +525,7 @@ function currentRoom() {
 
 function currentOptics() {
   return {
-    pupilM: clamp(numberValue(els.pupilMm, 4), 1, 9) / 1000,
+    pupilM: FIXED_PUPIL_DIAMETER_MM / 1000,
     ipdM: clamp(numberValue(els.ipdMm, 64), 45, 80) / 1000,
     blur: els.blurToggle.checked,
     diplopia: els.diplopiaToggle.checked,
@@ -1601,7 +1617,7 @@ function loadDefaultScene() {
 }
 
 function resetAll() {
-  els.pupilMm.value = DEFAULTS.optics.pupilMm.toFixed(1);
+  if (els.pupilMm) els.pupilMm.value = FIXED_PUPIL_DIAMETER_MM.toFixed(1);
   els.ipdMm.value = DEFAULTS.optics.ipdMm.toFixed(0);
 
   els.blurToggle.checked = DEFAULTS.optics.blur;
@@ -2391,7 +2407,12 @@ function opticsChanged() {
 }
 
 function bindEvents() {
-  for (const el of [els.pupilMm, els.ipdMm, els.maxBlurPx]) {
+  // Pupil diameter is fixed at 4.0 mm for now. The element remains in the
+  // page so the control can be restored later by flipping the flag above.
+  if (SHOW_PUPIL_DIAMETER_CONTROL && els.pupilMm) {
+    els.pupilMm.addEventListener('input', opticsChanged);
+  }
+  for (const el of [els.ipdMm, els.maxBlurPx]) {
     el.addEventListener('input', opticsChanged);
   }
   els.blurToggle.addEventListener('change', opticsChanged);
