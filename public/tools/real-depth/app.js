@@ -323,7 +323,8 @@ function installScenePersistenceUi() {
     const duplicateButton = document.createElement('button');
     duplicateButton.id = 'duplicateObjectBtn';
     duplicateButton.type = 'button';
-    duplicateButton.className = deleteButton.className || 'button';
+    // Match the Set Object as Focus button's color scheme/style.
+    duplicateButton.className = els.setFocusBtn?.className || deleteButton.className || 'button';
     duplicateButton.textContent = 'Duplicate';
     duplicateButton.title = 'Duplicate the selected object';
 
@@ -584,15 +585,15 @@ function installWorkspaceLayoutStyles() {
     }
 
     .scene-reset-button,
-    .scene-save-button,
-    .scene-save-download {
+    .scene-load-button {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: var(--navy, var(--accent, #324C63));
       color: var(--cream, #F0E8D8);
     }
 
     .scene-clear-button,
-    .scene-load-button {
+    .scene-save-button,
+    .scene-save-download {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: transparent;
       color: var(--navy, var(--accent, #324C63));
