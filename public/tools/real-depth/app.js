@@ -56,6 +56,11 @@ const els = {
   objYDeg: $('objYDeg'),
   setFocusBtn: $('setFocusBtn'),
   deleteObjectBtn: $('deleteObjectBtn'),
+  duplicateObjectBtn: null,
+  saveSceneBtn: null,
+  loadSceneBtn: null,
+  sceneFileInput: null,
+  sceneActionStatus: null,
   focusStatusText: $('focusStatusText'),
   focusDistanceReadout: $('focusDistanceReadout'),
   focusDiopterReadout: $('focusDiopterReadout'),
@@ -295,6 +300,80 @@ function installWorkspaceLayout() {
   installWorkspaceLayoutStyles();
 }
 
+
+function installScenePersistenceUi() {
+  // Add Save/Load controls to the bar below the viewport.
+  const bar = document.getElementById('sceneActionBar');
+  if (bar && !document.getElementById('saveSceneBtn')) {
+    const status = document.createElement('span');
+    status.id = 'sceneActionStatus';
+    status.className = 'scene-action-status';
+    status.setAttribute('aria-live', 'polite');
+
+    const saveButton = document.createElement('button');
+    saveButton.id = 'saveSceneBtn';
+    saveButton.type = 'button';
+    saveButton.className = 'button scene-save-button';
+    saveButton.textContent = 'Save scene';
+    saveButton.title = 'Download this scene as a JSON file';
+
+    const loadButton = document.createElement('button');
+    loadButton.id = 'loadSceneBtn';
+    loadButton.type = 'button';
+    loadButton.className = 'button scene-load-button';
+    loadButton.textContent = 'Load scene';
+    loadButton.title = 'Load a previously saved scene file';
+
+    const fileInput = document.createElement('input');
+    fileInput.id = 'sceneFileInput';
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.className = 'scene-file-input';
+    fileInput.setAttribute('aria-label', 'Load saved scene file');
+
+    bar.prepend(status, saveButton, loadButton);
+    bar.appendChild(fileInput);
+
+    els.sceneActionStatus = status;
+    els.saveSceneBtn = saveButton;
+    els.loadSceneBtn = loadButton;
+    els.sceneFileInput = fileInput;
+  } else {
+    els.sceneActionStatus = $('sceneActionStatus');
+    els.saveSceneBtn = $('saveSceneBtn');
+    els.loadSceneBtn = $('loadSceneBtn');
+    els.sceneFileInput = $('sceneFileInput');
+  }
+
+  // Add Duplicate beside Delete in the Selected object header.
+  if (els.deleteObjectBtn && !document.getElementById('duplicateObjectBtn')) {
+    const deleteButton = els.deleteObjectBtn;
+    const parent = deleteButton.parentElement;
+
+    const duplicateButton = document.createElement('button');
+    duplicateButton.id = 'duplicateObjectBtn';
+    duplicateButton.type = 'button';
+    duplicateButton.className = deleteButton.className || 'button';
+    duplicateButton.textContent = 'Duplicate';
+    duplicateButton.title = 'Duplicate the selected object';
+
+    if (parent) {
+      let actionGroup = parent.querySelector('.selected-object-actions');
+      if (!actionGroup) {
+        actionGroup = document.createElement('div');
+        actionGroup.className = 'selected-object-actions';
+        parent.insertBefore(actionGroup, deleteButton);
+        actionGroup.appendChild(deleteButton);
+      }
+      actionGroup.insertBefore(duplicateButton, deleteButton);
+    }
+
+    els.duplicateObjectBtn = duplicateButton;
+  } else {
+    els.duplicateObjectBtn = $('duplicateObjectBtn');
+  }
+}
+
 function makeCollapsiblePanelSection(section, title, initiallyExpanded = false) {
   if (!section || section.dataset.collapsibleInstalled === 'true') return;
 
@@ -451,13 +530,45 @@ function installWorkspaceLayoutStyles() {
       color: var(--cream, #F0E8D8);
     }
 
-    .scene-clear-button {
+    .scene-clear-button,
+    .scene-load-button {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: transparent;
       color: var(--navy, var(--accent, #324C63));
     }
 
+    .scene-save-button {
+      border: 1px solid var(--navy, var(--accent, #324C63));
+      background: var(--navy, var(--accent, #324C63));
+      color: var(--cream, #F0E8D8);
+    }
+
+    .scene-file-input {
+      display: none !important;
+    }
+
+    .scene-action-status {
+      margin-right: auto;
+      min-width: 0;
+      color: var(--muted, #66717A);
+      font-size: 0.88rem;
+      line-height: 1.3;
+    }
+
+    .selected-object-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: auto;
+    }
+
+    .selected-object-actions .button {
+      width: auto;
+    }
+
     .scene-clear-button:hover,
+    .scene-load-button:hover,
+    .scene-save-button:hover,
     .scene-reset-button:hover {
       transform: translateY(-1px);
     }
@@ -465,10 +576,16 @@ function installWorkspaceLayoutStyles() {
     @media (max-width: 560px) {
       .scene-action-bar {
         justify-content: stretch;
+        flex-wrap: wrap;
+      }
+
+      .scene-action-status {
+        flex: 1 0 100%;
+        margin-right: 0;
       }
 
       .scene-action-bar .button {
-        flex: 1 1 0;
+        flex: 1 1 calc(50% - 0.65rem);
         min-width: 0;
       }
     }
@@ -524,8 +641,12 @@ function currentRoom() {
 }
 
 function currentOptics() {
+  const pupilMm = SHOW_PUPIL_DIAMETER_CONTROL
+    ? clamp(numberValue(els.pupilMm, FIXED_PUPIL_DIAMETER_MM), 1, 9)
+    : FIXED_PUPIL_DIAMETER_MM;
+
   return {
-    pupilM: FIXED_PUPIL_DIAMETER_MM / 1000,
+    pupilM: pupilMm / 1000,
     ipdM: clamp(numberValue(els.ipdMm, 64), 45, 80) / 1000,
     blur: els.blurToggle.checked,
     diplopia: els.diplopiaToggle.checked,
@@ -1554,6 +1675,231 @@ function clearScene() {
   markDirty();
 }
 
+function setSceneActionStatus(message, isError = false) {
+  if (!els.sceneActionStatus) return;
+  els.sceneActionStatus.textContent = message || '';
+  els.sceneActionStatus.style.color = isError ? '#9b2c2c' : '';
+  if (message) {
+    window.clearTimeout(setSceneActionStatus._timer);
+    setSceneActionStatus._timer = window.setTimeout(() => {
+      if (els.sceneActionStatus) {
+        els.sceneActionStatus.textContent = '';
+        els.sceneActionStatus.style.color = '';
+      }
+    }, 4000);
+  }
+}
+
+function sceneObjectSnapshot(obj) {
+  return {
+    type: obj.type,
+    text: obj.text,
+    name: obj.name,
+    color: obj.color,
+    distanceM: obj.distanceM,
+    positionXDeg: obj.positionXDeg,
+    positionYDeg: obj.positionYDeg,
+    lockMode: obj.lockMode,
+    widthM: obj.widthM,
+    heightM: obj.heightM,
+    angleXDeg: obj.angleXDeg,
+    angleYDeg: obj.angleYDeg,
+    orientationDeg: obj.orientationDeg ?? 0,
+    spatialFrequencyCpd: obj.spatialFrequencyCpd ?? 1.5,
+  };
+}
+
+function buildSceneSaveData() {
+  const selectedIndex = state.objects.findIndex(obj => obj.id === state.selectedId);
+  const focusedIndex = state.objects.findIndex(obj => obj.id === state.focusedId);
+
+  return {
+    format: 'real-depth-scene',
+    version: 1,
+    savedAt: new Date().toISOString(),
+    settings: {
+      optics: {
+        pupilMm: SHOW_PUPIL_DIAMETER_CONTROL
+          ? clamp(numberValue(els.pupilMm, FIXED_PUPIL_DIAMETER_MM), 1, 9)
+          : FIXED_PUPIL_DIAMETER_MM,
+        ipdMm: clamp(numberValue(els.ipdMm, DEFAULTS.optics.ipdMm), 45, 80),
+        blur: !!els.blurToggle.checked,
+        diplopia: !!els.diplopiaToggle.checked,
+        maxBlurPx: clamp(numberValue(els.maxBlurPx, DEFAULTS.optics.maxBlurPx), 2, 60),
+      },
+      display: {
+        widthCm: clamp(numberValue(els.displayWidthCm, DEFAULTS.display.widthCm), 10, 200),
+        viewingDistanceCm: clamp(numberValue(els.viewingDistanceCm, DEFAULTS.display.viewingDistanceCm), 20, 300),
+      },
+      room: currentRoom(),
+    },
+    objects: state.objects.map(sceneObjectSnapshot),
+    selectedObjectIndex: selectedIndex,
+    focusedObjectIndex: focusedIndex,
+  };
+}
+
+function saveSceneToFile() {
+  const data = buildSceneSaveData();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const now = new Date();
+  const datePart = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `real-depth-scene-${datePart}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setSceneActionStatus('Scene saved.');
+}
+
+function finiteSceneNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function applyLoadedSceneData(data) {
+  if (!data || data.format !== 'real-depth-scene' || data.version !== 1 || !Array.isArray(data.objects)) {
+    throw new Error('This is not a valid Real Depth Simulator scene file.');
+  }
+
+  const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  const optics = settings.optics && typeof settings.optics === 'object' ? settings.optics : {};
+  const display = settings.display && typeof settings.display === 'object' ? settings.display : {};
+  const room = settings.room && typeof settings.room === 'object' ? settings.room : {};
+
+  stopAllMovementKeys();
+
+  // Restore simulator settings first, because room dimensions constrain where
+  // objects can be recreated.
+  if (els.pupilMm) {
+    const loadedPupilMm = clamp(finiteSceneNumber(optics.pupilMm, FIXED_PUPIL_DIAMETER_MM), 1, 9);
+    els.pupilMm.value = (SHOW_PUPIL_DIAMETER_CONTROL ? loadedPupilMm : FIXED_PUPIL_DIAMETER_MM).toFixed(1);
+  }
+  els.ipdMm.value = clamp(finiteSceneNumber(optics.ipdMm, DEFAULTS.optics.ipdMm), 45, 80).toFixed(0);
+  els.blurToggle.checked = typeof optics.blur === 'boolean' ? optics.blur : DEFAULTS.optics.blur;
+  els.diplopiaToggle.checked = typeof optics.diplopia === 'boolean' ? optics.diplopia : DEFAULTS.optics.diplopia;
+  els.maxBlurPx.value = clamp(finiteSceneNumber(optics.maxBlurPx, DEFAULTS.optics.maxBlurPx), 2, 60).toFixed(0);
+
+  els.displayWidthCm.value = clamp(finiteSceneNumber(display.widthCm, DEFAULTS.display.widthCm), 10, 200).toFixed(1);
+  els.viewingDistanceCm.value = clamp(
+    finiteSceneNumber(display.viewingDistanceCm, DEFAULTS.display.viewingDistanceCm),
+    20,
+    300
+  ).toFixed(1);
+
+  els.roomWidthM.value = clamp(finiteSceneNumber(room.widthM, DEFAULTS.room.widthM), 1.5, 15).toFixed(1);
+  els.roomHeightM.value = clamp(finiteSceneNumber(room.heightM, DEFAULTS.room.heightM), 1.8, 8).toFixed(1);
+  els.roomDepthM.value = clamp(finiteSceneNumber(room.depthM, DEFAULTS.room.depthM), 1, 30).toFixed(1);
+  els.eyeHeightM.value = clamp(finiteSceneNumber(room.eyeHeightM, DEFAULTS.room.eyeHeightM), 0.5, 2.3).toFixed(2);
+  els.roomBrightness.value = clamp(finiteSceneNumber(room.brightness, DEFAULTS.room.brightness), 0.4, 2.5).toFixed(2);
+
+  buildRoom();
+  updateCameraAndCalibration();
+  clearObjects();
+
+  const allowedTypes = new Set(['letter', 'square', 'circle', 'triangle', 'gabor', 'arrow']);
+  const loadedObjects = [];
+
+  for (const saved of data.objects.slice(0, 250)) {
+    if (!saved || typeof saved !== 'object') continue;
+
+    const type = allowedTypes.has(saved.type) ? saved.type : 'square';
+    const distanceM = clamp(
+      finiteSceneNumber(saved.distanceM, 1.25),
+      0.15,
+      Math.max(0.16, currentRoom().depthM - 0.05)
+    );
+    const lockMode = saved.lockMode === 'visual' ? 'visual' : 'physical';
+
+    const obj = newObject({
+      type,
+      text: String(saved.text ?? 'A').slice(0, 12),
+      name: safeName(saved.name, type === 'letter' ? String(saved.text ?? 'A').slice(0, 12) : 'Object'),
+      color: normalizeHexColor(saved.color, '#111111'),
+      distanceM,
+      positionXDeg: finiteSceneNumber(saved.positionXDeg, 0),
+      positionYDeg: finiteSceneNumber(saved.positionYDeg, 0),
+      lockMode,
+      widthM: clamp(finiteSceneNumber(saved.widthM, 0.05), 0.001, 5),
+      heightM: clamp(finiteSceneNumber(saved.heightM, 0.05), 0.001, 5),
+      angleXDeg: clamp(finiteSceneNumber(saved.angleXDeg, 3), 0.01, 90),
+      angleYDeg: clamp(finiteSceneNumber(saved.angleYDeg, 3), 0.01, 90),
+      orientationDeg: normalizedOrientationDeg(saved.orientationDeg ?? 0),
+      spatialFrequencyCpd: normalizedGaborFrequencyCpd(saved.spatialFrequencyCpd ?? 1.5),
+    });
+
+    loadedObjects.push(obj);
+  }
+
+  const selectedIndex = Number.isInteger(data.selectedObjectIndex) ? data.selectedObjectIndex : -1;
+  const focusedIndex = Number.isInteger(data.focusedObjectIndex) ? data.focusedObjectIndex : -1;
+
+  state.selectedId = loadedObjects[selectedIndex]?.id ?? null;
+  state.focusedId = loadedObjects[focusedIndex]?.id ?? loadedObjects[0]?.id ?? null;
+
+  refreshAllStimulusTextures();
+  updateOutlines();
+  refreshUi();
+  markDirty();
+}
+
+async function loadSceneFromFile(file) {
+  if (!file) return;
+
+  try {
+    const raw = await file.text();
+    const data = JSON.parse(raw);
+    applyLoadedSceneData(data);
+    setSceneActionStatus(`Loaded ${file.name}.`);
+  } catch (error) {
+    console.error('Could not load scene:', error);
+    setSceneActionStatus(error?.message || 'Could not load scene file.', true);
+    window.alert(error?.message || 'Could not load this scene file.');
+  }
+}
+
+function duplicateSelectedObject() {
+  const source = selectedObject();
+  if (!source) return;
+
+  const limits = positionAngleLimits(source);
+  let duplicateXDeg = source.positionXDeg + 1.0;
+  if (duplicateXDeg > limits.maxXDeg) duplicateXDeg = source.positionXDeg - 1.0;
+  duplicateXDeg = clamp(duplicateXDeg, limits.minXDeg, limits.maxXDeg);
+
+  const copy = newObject({
+    type: source.type,
+    text: source.text,
+    name: `${source.name} copy`,
+    color: source.color,
+    distanceM: source.distanceM,
+    positionXDeg: duplicateXDeg,
+    positionYDeg: source.positionYDeg,
+    lockMode: source.lockMode,
+    widthM: source.widthM,
+    heightM: source.heightM,
+    angleXDeg: source.angleXDeg,
+    angleYDeg: source.angleYDeg,
+    orientationDeg: source.orientationDeg ?? 0,
+    spatialFrequencyCpd: source.spatialFrequencyCpd ?? 1.5,
+  });
+
+  state.selectedId = copy.id;
+  updateOutlines();
+  refreshUi();
+  markDirty();
+}
+
 function loadDefaultScene() {
   clearObjects();
 
@@ -2438,6 +2784,22 @@ function bindEvents() {
   els.resetSceneBtn.addEventListener('click', resetAll);
   if (els.clearSceneBtn) els.clearSceneBtn.addEventListener('click', clearScene);
 
+  if (els.saveSceneBtn) {
+    els.saveSceneBtn.addEventListener('click', saveSceneToFile);
+  }
+  if (els.loadSceneBtn && els.sceneFileInput) {
+    els.loadSceneBtn.addEventListener('click', () => els.sceneFileInput.click());
+    els.sceneFileInput.addEventListener('change', async () => {
+      const file = els.sceneFileInput.files?.[0] ?? null;
+      await loadSceneFromFile(file);
+      // Allow the same file to be selected again later.
+      els.sceneFileInput.value = '';
+    });
+  }
+  if (els.duplicateObjectBtn) {
+    els.duplicateObjectBtn.addEventListener('click', duplicateSelectedObject);
+  }
+
   // Free-text fields update live, but do not rewrite the editor while the
   // user is typing, so the caret stays where the user put it.
   els.objName.addEventListener('input', () => commitSelectedFromEditor('name', { refreshEditor: false }));
@@ -2512,6 +2874,7 @@ function init() {
     createPostProcessing();
     installStimulusUi();
     installWorkspaceLayout();
+    installScenePersistenceUi();
     bindEvents();
     buildRoom();
     updateCameraAndCalibration();
