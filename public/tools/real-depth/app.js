@@ -59,10 +59,10 @@ const els = {
   duplicateObjectBtn: null,
   saveSceneBtn: null,
   loadSceneBtn: null,
+  saveNameInput: null,
+  saveDownloadBtn: null,
   sceneFileInput: null,
   sceneActionStatus: null,
-  renameSceneBtn: null,
-  sceneTitleDisplay: null,
   focusStatusText: $('focusStatusText'),
   focusDistanceReadout: $('focusDistanceReadout'),
   focusDiopterReadout: $('focusDiopterReadout'),
@@ -78,8 +78,6 @@ const els = {
 // Set SHOW_PUPIL_DIAMETER_CONTROL to true if you want to expose the control later.
 const FIXED_PUPIL_DIAMETER_MM = 4.0;
 const SHOW_PUPIL_DIAMETER_CONTROL = false;
-
-const DEFAULT_SCENE_TITLE = 'Real Depth Scene';
 
 const DEFAULTS = {
   optics: {
@@ -107,7 +105,6 @@ let state = {
   selectedId: null,
   focusedId: null,
   nextId: 1,
-  sceneTitle: DEFAULT_SCENE_TITLE,
 };
 
 let calibration = {
@@ -309,72 +306,12 @@ function installWorkspaceLayout() {
 function installScenePersistenceUi() {
   const bar = document.getElementById('sceneActionBar');
 
-  // Add a scene title immediately above the viewport.
-  if (!document.getElementById('sceneTitleDisplay') && els.viewport) {
-    const titleRow = document.createElement('div');
-    titleRow.className = 'scene-title-row';
-
-    const title = document.createElement('h2');
-    title.id = 'sceneTitleDisplay';
-    title.className = 'scene-title';
-    title.textContent = state.sceneTitle;
-
-    titleRow.appendChild(title);
-    els.viewport.insertAdjacentElement('beforebegin', titleRow);
-    els.sceneTitleDisplay = title;
-  } else {
-    els.sceneTitleDisplay = $('sceneTitleDisplay');
-  }
-
-  // Add Save/Load/Rename controls to the bar below the viewport.
-  if (bar && !document.getElementById('saveSceneBtn')) {
-    const status = document.createElement('span');
-    status.id = 'sceneActionStatus';
-    status.className = 'scene-action-status';
-    status.setAttribute('aria-live', 'polite');
-
-    const saveButton = document.createElement('button');
-    saveButton.id = 'saveSceneBtn';
-    saveButton.type = 'button';
-    saveButton.className = 'button scene-save-button';
-    saveButton.textContent = 'Save';
-    saveButton.title = 'Download this scene as a JSON file';
-
-    const loadButton = document.createElement('button');
-    loadButton.id = 'loadSceneBtn';
-    loadButton.type = 'button';
-    loadButton.className = 'button scene-load-button';
-    loadButton.textContent = 'Load';
-    loadButton.title = 'Load a previously saved scene file';
-
-    const renameButton = document.createElement('button');
-    renameButton.id = 'renameSceneBtn';
-    renameButton.type = 'button';
-    renameButton.className = 'button scene-rename-button';
-    renameButton.textContent = 'Rename Scene';
-    renameButton.title = 'Rename the current scene';
-
-    const fileInput = document.createElement('input');
-    fileInput.id = 'sceneFileInput';
-    fileInput.type = 'file';
-    fileInput.accept = '.json,application/json';
-    fileInput.className = 'scene-file-input';
-    fileInput.setAttribute('aria-label', 'Load saved scene file');
-
-    // Final order: Save, Load, Rename Scene, Reset, Clear.
-    bar.prepend(saveButton, loadButton, renameButton);
-    bar.append(fileInput, status);
-
-    els.sceneActionStatus = status;
-    els.saveSceneBtn = saveButton;
-    els.loadSceneBtn = loadButton;
-    els.renameSceneBtn = renameButton;
-    els.sceneFileInput = fileInput;
-  } else {
+  if (bar) {
     els.sceneActionStatus = $('sceneActionStatus');
     els.saveSceneBtn = $('saveSceneBtn');
     els.loadSceneBtn = $('loadSceneBtn');
-    els.renameSceneBtn = $('renameSceneBtn');
+    els.saveNameInput = $('saveNameInput');
+    els.saveDownloadBtn = $('saveDownloadBtn');
     els.sceneFileInput = $('sceneFileInput');
   }
 
@@ -456,6 +393,12 @@ function makeCollapsiblePanelSection(section, title, initiallyExpanded = false) 
 function installSceneActionBar() {
   if (document.getElementById('sceneActionBar')) {
     els.clearSceneBtn = $('clearSceneBtn');
+    els.saveSceneBtn = $('saveSceneBtn');
+    els.loadSceneBtn = $('loadSceneBtn');
+    els.saveNameInput = $('saveNameInput');
+    els.saveDownloadBtn = $('saveDownloadBtn');
+    els.sceneFileInput = $('sceneFileInput');
+    els.sceneActionStatus = $('sceneActionStatus');
     return;
   }
 
@@ -466,11 +409,16 @@ function installSceneActionBar() {
   bar.id = 'sceneActionBar';
   bar.className = 'scene-action-bar';
 
-  // Move the existing Reset scene button out of the page header and into the
-  // new bar. Keep its id so the existing reset behavior remains unchanged.
+  const topRow = document.createElement('div');
+  topRow.className = 'scene-action-row scene-action-row-top';
+
+  const bottomRow = document.createElement('div');
+  bottomRow.className = 'scene-action-row scene-action-row-bottom';
+
+  // Top row: Reset / Clear.
   els.resetSceneBtn.className = 'button scene-reset-button';
   els.resetSceneBtn.textContent = 'Reset';
-  els.resetSceneBtn.title = 'Restore the default simulator scene and settings';
+  els.resetSceneBtn.title = 'Restore the default scene and simulator settings';
 
   const clearButton = document.createElement('button');
   clearButton.id = 'clearSceneBtn';
@@ -479,14 +427,78 @@ function installSceneActionBar() {
   clearButton.textContent = 'Clear';
   clearButton.title = 'Remove all objects from the scene';
 
-  bar.append(els.resetSceneBtn, clearButton);
-  els.viewport.insertAdjacentElement('afterend', bar);
-  els.clearSceneBtn = clearButton;
+  topRow.append(els.resetSceneBtn, clearButton);
 
-  // The old header action wrapper is no longer needed once Reset scene moves.
+  // Bottom row: expandable Save control / Load.
+  const saveGroup = document.createElement('div');
+  saveGroup.id = 'saveSceneGroup';
+  saveGroup.className = 'scene-save-group';
+
+  const saveButton = document.createElement('button');
+  saveButton.id = 'saveSceneBtn';
+  saveButton.type = 'button';
+  saveButton.className = 'button scene-save-button';
+  saveButton.textContent = 'Save';
+  saveButton.title = 'Choose a file name and download this scene';
+  saveButton.setAttribute('aria-expanded', 'false');
+
+  const saveNameInput = document.createElement('input');
+  saveNameInput.id = 'saveNameInput';
+  saveNameInput.type = 'text';
+  saveNameInput.className = 'scene-save-name';
+  saveNameInput.placeholder = 'Enter file name';
+  saveNameInput.autocomplete = 'off';
+  saveNameInput.spellcheck = false;
+  saveNameInput.setAttribute('aria-label', 'Scene file name');
+
+  const saveDownloadButton = document.createElement('button');
+  saveDownloadButton.id = 'saveDownloadBtn';
+  saveDownloadButton.type = 'button';
+  saveDownloadButton.className = 'button scene-save-download';
+  saveDownloadButton.textContent = '↓';
+  saveDownloadButton.title = 'Download scene';
+  saveDownloadButton.setAttribute('aria-label', 'Download scene');
+
+  saveGroup.append(saveButton, saveNameInput, saveDownloadButton);
+
+  const loadButton = document.createElement('button');
+  loadButton.id = 'loadSceneBtn';
+  loadButton.type = 'button';
+  loadButton.className = 'button scene-load-button';
+  loadButton.textContent = 'Load';
+  loadButton.title = 'Load a previously saved scene file';
+
+  const fileInput = document.createElement('input');
+  fileInput.id = 'sceneFileInput';
+  fileInput.type = 'file';
+  fileInput.accept = '.json,application/json';
+  fileInput.className = 'scene-file-input';
+  fileInput.setAttribute('aria-label', 'Load saved scene file');
+
+  // Keep status available to assistive technology without adding a third row.
+  const status = document.createElement('span');
+  status.id = 'sceneActionStatus';
+  status.className = 'scene-action-status';
+  status.setAttribute('aria-live', 'polite');
+
+  bottomRow.append(saveGroup, loadButton);
+  bar.append(topRow, bottomRow, fileInput, status);
+
+  els.viewport.insertAdjacentElement('afterend', bar);
+
+  els.clearSceneBtn = clearButton;
+  els.saveSceneBtn = saveButton;
+  els.loadSceneBtn = loadButton;
+  els.saveNameInput = saveNameInput;
+  els.saveDownloadBtn = saveDownloadButton;
+  els.sceneFileInput = fileInput;
+  els.sceneActionStatus = status;
+
+  // The old header action wrapper is no longer needed once Reset moves here.
   const headerActions = document.querySelector('.header-actions');
   if (headerActions && headerActions.children.length === 0) headerActions.remove();
 }
+
 
 function installWorkspaceLayoutStyles() {
   if (document.getElementById('workspaceLayoutStyles')) return;
@@ -545,59 +557,110 @@ function installWorkspaceLayoutStyles() {
       display: none !important;
     }
 
-    .scene-title-row {
-      display: flex;
-      align-items: center;
-      padding: 0.9rem 1rem 0.7rem;
-      background: var(--panel, #ffffff);
-      border-bottom: 1px solid var(--border, #d8dde4);
-    }
-
-    .scene-title {
-      margin: 0 !important;
-      color: var(--navy, var(--accent, #324C63));
-      font: inherit;
-      font-size: 1.35rem !important;
-      font-weight: 700;
-      line-height: 1.2;
-      letter-spacing: 0 !important;
-    }
-
     .scene-action-bar {
       display: flex;
-      justify-content: stretch;
-      align-items: stretch;
-      gap: 0.55rem;
-      padding: 0.7rem 0.8rem;
+      flex-direction: column;
+      padding: 0;
       border-top: 1px solid var(--border, #d8dde4);
       background: var(--panel, #ffffff);
     }
 
-    .scene-action-bar .button {
-      flex: 1 1 0;
-      width: 0;
-      min-width: 0;
-      white-space: nowrap;
+    .scene-action-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.7rem;
+      padding: 0.75rem 0.8rem;
     }
 
-    .scene-reset-button {
+    .scene-action-row-bottom {
+      border-top: 1px solid var(--border, #d8dde4);
+    }
+
+    .scene-action-row .button,
+    .scene-save-group .button {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .scene-reset-button,
+    .scene-save-button,
+    .scene-save-download {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: var(--navy, var(--accent, #324C63));
       color: var(--cream, #F0E8D8);
     }
 
     .scene-clear-button,
-    .scene-load-button,
-    .scene-rename-button {
+    .scene-load-button {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: transparent;
       color: var(--navy, var(--accent, #324C63));
     }
 
-    .scene-save-button {
-      border: 1px solid var(--navy, var(--accent, #324C63));
-      background: var(--navy, var(--accent, #324C63));
-      color: var(--cream, #F0E8D8);
+    .scene-save-group {
+      display: flex;
+      align-items: stretch;
+      min-width: 0;
+      gap: 0;
+    }
+
+    .scene-save-group .scene-save-button {
+      flex: 1 1 auto;
+      transition:
+        flex-basis 0.2s ease,
+        width 0.2s ease,
+        border-radius 0.2s ease;
+    }
+
+    .scene-save-name,
+    .scene-save-download {
+      display: none;
+    }
+
+    .scene-save-group.expanded {
+      gap: 0.4rem;
+    }
+
+    .scene-save-group.expanded .scene-save-button {
+      display: block;
+      flex: 0 0 76px;
+      width: 76px;
+    }
+
+    .scene-save-group.expanded .scene-save-name {
+      display: block;
+      flex: 1 1 auto;
+      min-width: 0;
+      width: 100%;
+      padding: 0 0.65rem;
+      border: 1px solid var(--border, #d8dde4);
+      border-radius: 4px;
+      background: #ffffff;
+      color: var(--text, #28343D);
+      font: inherit;
+    }
+
+    .scene-save-group.expanded .scene-save-name::placeholder {
+      color: #9aa1a8;
+      opacity: 1;
+    }
+
+    .scene-save-group.expanded .scene-save-name.needs-name {
+      border-color: #9b2c2c;
+      outline: 1px solid #9b2c2c;
+    }
+
+    .scene-save-group.expanded .scene-save-download {
+      display: inline-flex;
+      flex: 0 0 44px;
+      width: 44px;
+      min-width: 44px;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 1.25rem;
+      line-height: 1;
     }
 
     .scene-file-input {
@@ -605,7 +668,23 @@ function installWorkspaceLayoutStyles() {
     }
 
     .scene-action-status {
-      display: none;
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+
+    .scene-clear-button:hover,
+    .scene-load-button:hover,
+    .scene-save-button:hover,
+    .scene-save-download:hover,
+    .scene-reset-button:hover {
+      transform: translateY(-1px);
     }
 
     .selected-object-actions {
@@ -621,21 +700,33 @@ function installWorkspaceLayoutStyles() {
 
     .scene-clear-button:hover,
     .scene-load-button:hover,
-    .scene-rename-button:hover,
     .scene-save-button:hover,
     .scene-reset-button:hover {
       transform: translateY(-1px);
     }
 
-    @media (max-width: 700px) {
-      .scene-action-bar {
-        flex-wrap: wrap;
+    @media (max-width: 560px) {
+      .scene-action-row {
+        gap: 0.5rem;
+        padding: 0.65rem;
       }
 
-      .scene-action-bar .button {
-        flex: 1 1 calc(50% - 0.55rem);
-        width: auto;
-        min-width: 120px;
+      .scene-save-group.expanded .scene-save-button {
+        flex-basis: 64px;
+        width: 64px;
+        padding-left: 0.45rem;
+        padding-right: 0.45rem;
+      }
+
+      .scene-save-group.expanded .scene-save-name {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+      }
+
+      .scene-save-group.expanded .scene-save-download {
+        flex-basis: 40px;
+        width: 40px;
+        min-width: 40px;
       }
     }
   `;
@@ -1739,47 +1830,6 @@ function setSceneActionStatus(message, isError = false) {
   }
 }
 
-function normalizeSceneTitle(value) {
-  const title = String(value ?? '').trim();
-  return title || DEFAULT_SCENE_TITLE;
-}
-
-function updateSceneTitleDisplay() {
-  if (els.sceneTitleDisplay) {
-    els.sceneTitleDisplay.textContent = state.sceneTitle;
-  }
-}
-
-function renameScene() {
-  const requested = window.prompt('Rename scene:', state.sceneTitle);
-  if (requested === null) return;
-
-  state.sceneTitle = normalizeSceneTitle(requested);
-  updateSceneTitleDisplay();
-}
-
-function filenameFromSceneTitle() {
-  if (normalizeSceneTitle(state.sceneTitle) === DEFAULT_SCENE_TITLE) {
-    const now = new Date();
-    const datePart = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, '0'),
-      String(now.getDate()).padStart(2, '0'),
-    ].join('-');
-    return `real-depth-scene-${datePart}.json`;
-  }
-
-  // Keep the user's title recognizable while removing characters that cannot
-  // safely be used in common filenames.
-  let filename = normalizeSceneTitle(state.sceneTitle)
-    .replace(/[\\/:*?"<>|]+/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!filename) filename = 'real-depth-scene';
-  return `${filename}.json`;
-}
-
 function sceneObjectSnapshot(obj) {
   return {
     type: obj.type,
@@ -1806,7 +1856,6 @@ function buildSceneSaveData() {
   return {
     format: 'real-depth-scene',
     version: 1,
-    sceneTitle: state.sceneTitle,
     savedAt: new Date().toISOString(),
     settings: {
       optics: {
@@ -1830,21 +1879,55 @@ function buildSceneSaveData() {
   };
 }
 
-function saveSceneToFile() {
+function normalizedSceneFilename(rawName) {
+  let filename = String(rawName ?? '').trim();
+  if (!filename) return '';
+  filename = filename.replace(/[\\/:*?"<>|]+/g, '-');
+  if (!filename.toLowerCase().endsWith('.json')) filename += '.json';
+  return filename;
+}
+
+function saveSceneToFile(rawName) {
+  const filename = normalizedSceneFilename(rawName);
+
+  if (!filename) {
+    if (els.saveNameInput) {
+      els.saveNameInput.focus();
+      els.saveNameInput.classList.add('needs-name');
+      window.setTimeout(() => els.saveNameInput?.classList.remove('needs-name'), 900);
+    }
+    setSceneActionStatus('Enter a file name before downloading.');
+    return false;
+  }
+
   const data = buildSceneSaveData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
   const link = document.createElement('a');
   link.href = url;
-  link.download = filenameFromSceneTitle();
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setSceneActionStatus('Scene saved.');
+  setSceneActionStatus(`Saved ${filename}.`);
+  return true;
 }
+
+function setSaveControlsExpanded(expanded) {
+  const group = document.getElementById('saveSceneGroup');
+  if (!group || !els.saveSceneBtn) return;
+
+  group.classList.toggle('expanded', expanded);
+  els.saveSceneBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+  if (expanded) {
+    window.requestAnimationFrame(() => els.saveNameInput?.focus());
+  }
+}
+
 
 function finiteSceneNumber(value, fallback) {
   const n = Number(value);
@@ -1855,9 +1938,6 @@ function applyLoadedSceneData(data) {
   if (!data || data.format !== 'real-depth-scene' || data.version !== 1 || !Array.isArray(data.objects)) {
     throw new Error('This is not a valid Real Depth Simulator scene file.');
   }
-
-  state.sceneTitle = normalizeSceneTitle(data.sceneTitle ?? DEFAULT_SCENE_TITLE);
-  updateSceneTitleDisplay();
 
   const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
   const optics = settings.optics && typeof settings.optics === 'object' ? settings.optics : {};
@@ -2050,9 +2130,6 @@ function loadDefaultScene() {
 }
 
 function resetAll() {
-  state.sceneTitle = DEFAULT_SCENE_TITLE;
-  updateSceneTitleDisplay();
-
   if (els.pupilMm) els.pupilMm.value = FIXED_PUPIL_DIAMETER_MM.toFixed(1);
   els.ipdMm.value = DEFAULTS.optics.ipdMm.toFixed(0);
 
@@ -2871,14 +2948,47 @@ function bindEvents() {
 
   els.newObjectType.addEventListener('change', updateNewObjectControls);
   els.addObjectBtn.addEventListener('click', addObjectFromControls);
-  els.resetSceneBtn.addEventListener('click', resetAll);
-  if (els.clearSceneBtn) els.clearSceneBtn.addEventListener('click', clearScene);
+  els.resetSceneBtn.addEventListener('click', () => {
+    setSaveControlsExpanded(false);
+    if (els.saveNameInput) els.saveNameInput.value = '';
+    resetAll();
+  });
+  if (els.clearSceneBtn) {
+    els.clearSceneBtn.addEventListener('click', () => {
+      setSaveControlsExpanded(false);
+      if (els.saveNameInput) els.saveNameInput.value = '';
+      clearScene();
+    });
+  }
 
   if (els.saveSceneBtn) {
-    els.saveSceneBtn.addEventListener('click', saveSceneToFile);
+    els.saveSceneBtn.addEventListener('click', () => {
+      const group = document.getElementById('saveSceneGroup');
+      const isExpanded = group?.classList.contains('expanded') ?? false;
+      setSaveControlsExpanded(!isExpanded);
+    });
   }
-  if (els.renameSceneBtn) {
-    els.renameSceneBtn.addEventListener('click', renameScene);
+  if (els.saveDownloadBtn && els.saveNameInput) {
+    const triggerSceneDownload = () => {
+      const saved = saveSceneToFile(els.saveNameInput.value);
+      if (saved) {
+        els.saveNameInput.value = '';
+        setSaveControlsExpanded(false);
+      }
+    };
+
+    els.saveDownloadBtn.addEventListener('click', triggerSceneDownload);
+    els.saveNameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        triggerSceneDownload();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        els.saveNameInput.value = '';
+        setSaveControlsExpanded(false);
+        els.saveSceneBtn?.focus();
+      }
+    });
   }
   if (els.loadSceneBtn && els.sceneFileInput) {
     els.loadSceneBtn.addEventListener('click', () => els.sceneFileInput.click());
@@ -2968,7 +3078,6 @@ function init() {
     installStimulusUi();
     installWorkspaceLayout();
     installScenePersistenceUi();
-    updateSceneTitleDisplay();
     bindEvents();
     buildRoom();
     updateCameraAndCalibration();
