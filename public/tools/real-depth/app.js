@@ -1739,10 +1739,10 @@ function buildSceneSaveData() {
   };
 }
 
-function saveSceneToFile() {
+async function saveSceneToFile() {
   const data = buildSceneSaveData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+  const jsonText = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonText], { type: 'application/json' });
 
   const now = new Date();
   const datePart = [
@@ -1750,10 +1750,60 @@ function saveSceneToFile() {
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('-');
+  const suggestedName = `real-depth-scene-${datePart}.json`;
 
+  // Chromium-based browsers support the File System Access API, which opens
+  // the native Save As dialog so the user can choose both the filename and
+  // destination folder before anything is written.
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const fileHandle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [
+          {
+            description: 'Real Depth Simulator scene',
+            accept: {
+              'application/json': ['.json'],
+            },
+          },
+        ],
+      });
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      setSceneActionStatus('Scene saved.');
+      return;
+    } catch (error) {
+      // Closing/canceling the Save As dialog is normal and should not trigger
+      // an error message or an automatic download.
+      if (error?.name === 'AbortError') {
+        setSceneActionStatus('Save canceled.');
+        return;
+      }
+
+      console.error('Could not use Save As dialog:', error);
+      setSceneActionStatus('Save As is unavailable; using browser download instead.');
+    }
+  }
+
+  // Fallback for browsers without showSaveFilePicker (for example, some
+  // Safari/Firefox versions). Ask for a filename first, then use the browser's
+  // normal download behavior.
+  const requestedName = window.prompt('Name this scene file:', suggestedName);
+  if (requestedName === null) {
+    setSceneActionStatus('Save canceled.');
+    return;
+  }
+
+  let filename = String(requestedName).trim() || suggestedName;
+  if (!filename.toLowerCase().endsWith('.json')) filename += '.json';
+
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `real-depth-scene-${datePart}.json`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
