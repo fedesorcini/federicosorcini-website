@@ -1,0 +1,28 @@
+VALIDATION NOTES
+
+This browser version was translated from the supplied Shiny/R script, preserving:
+- Normal population generation with true mean = Cohen's d × population SD.
+- One-sample t-test against mu = 0 with two-sided / greater / less alternatives.
+- Baseline analyses using exactly the initial N.
+- Optional-stopping order and strict inequalities (p < alpha, p > Max p).
+- Blank Max p -> 1 and blank Max n -> no finite maximum.
+- Outlier removal only when the unmodified p-value is above alpha.
+- Outliers defined from the current sample mean and sample SD.
+- The selected SD cutoff is the valid cutoff with the smallest p-value.
+- Null simulations plus selected-effect simulations when d != 0.
+- The source app's null-display behavior when optional stopping is enabled.
+- FP / Power labels computed as proportion of p-values strictly below alpha.
+- Proportion/count histogram modes, graph bin widths, x-axis ranges, alpha shading,
+  alpha/zero reference lines, and the original default inputs.
+
+NUMERIC CHECKS
+- The JavaScript Student-t CDF was compared against scipy.stats.t.cdf across
+  100 random t/df combinations (df 1-200, t between -8 and 8).
+  Maximum absolute difference: 2.75e-14.
+- A direct one-sample t-test example matched SciPy to floating-point precision.
+- A 20,000-study null simulation with n=30, alpha=.05 produced an empirical
+  false-positive rate near .05.
+- A 20,000-study d=.5, n=30, two-sided simulation produced power near .754,
+  agreeing with noncentral-t theoretical power (~.754).
+
+The simulation runs in worker.js so long simulations do not freeze the UI.

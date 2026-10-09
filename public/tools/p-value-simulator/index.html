@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Interactive one-sample t-test simulation of p-values, power, optional stopping, and outlier removal." />
+  <title>One-Sample t-Test Simulation</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>One-Sample t-Test Simulation</h1>
+      <p>Explore p-values, power, optional stopping, and outlier-removal flexibility across repeated simulated studies.</p>
+    </div>
+    <a class="header-link" href="/tools">Back to Tools</a>
+  </header>
+
+  <main id="simLayout" class="sim-layout">
+    <aside id="sidebarPane" class="sidebar-pane" aria-label="Simulation controls">
+      <button id="runSimulation" class="run-button" type="button">Run simulation</button>
+      <div id="runProgressWrap" class="progress-wrap" hidden>
+        <div class="progress-track" aria-hidden="true"><div id="runProgressBar" class="progress-bar"></div></div>
+        <span id="runProgressText">Running simulation… 0%</span>
+      </div>
+      <div id="validationMessage" class="validation-message" role="alert" hidden></div>
+
+      <section class="sidebar-section">
+        <h2>Study design</h2>
+        <p class="study-type">One-sample t-test</p>
+
+        <label class="field-row">
+          <span class="field-label">Distribution</span>
+          <span class="field-control">
+            <select id="population">
+              <option value="normal" selected>Normal</option>
+            </select>
+          </span>
+        </label>
+
+        <label class="field-row">
+          <span class="field-label">Alternative hypothesis</span>
+          <span class="field-control">
+            <select id="alternative">
+              <option value="two.sided" selected>Two-sided</option>
+              <option value="greater">Greater than 0</option>
+              <option value="less">Less than 0</option>
+            </select>
+          </span>
+        </label>
+      </section>
+
+      <section class="sidebar-section">
+        <h2>Parameters</h2>
+
+        <label class="field-row">
+          <span class="field-label">N</span>
+          <span class="field-control"><input id="sampleN" type="number" value="30" min="2" max="100000" step="1" /></span>
+        </label>
+
+        <label class="field-row">
+          <span class="field-label">sd</span>
+          <span class="field-control"><input id="populationSd" type="number" value="1" min="0.0001" max="100000" step="0.1" /></span>
+        </label>
+
+        <label class="field-row">
+          <span class="field-label">Studies</span>
+          <span class="field-control"><input id="nStudies" type="number" value="10000" min="100" max="100000" step="1000" /></span>
+        </label>
+
+        <label class="field-row range-row">
+          <span class="field-label">Effect size (Cohen's d)</span>
+          <span class="field-control range-control">
+            <input id="effectD" type="range" value="0" min="-1.5" max="1.5" step="0.1" />
+            <output id="effectDValue" for="effectD">0.0</output>
+          </span>
+        </label>
+
+        <label class="field-row range-row">
+          <span class="field-label">Alpha</span>
+          <span class="field-control range-control alpha-control">
+            <input id="alpha" type="range" value="0.05" min="0.001" max="0.10" step="0.001" />
+            <output id="alphaValue" for="alpha">0.050</output>
+            <span class="alpha-ticks" aria-hidden="true">
+              <span class="alpha-tick first" style="left:0%">.001</span>
+              <span class="alpha-tick" style="left:9.09%">.01</span>
+              <span class="alpha-tick" style="left:49.49%">.05</span>
+              <span class="alpha-tick last" style="left:100%">.10</span>
+            </span>
+          </span>
+        </label>
+
+        <label id="showNullRow" class="field-row" hidden>
+          <span class="field-label">Null comparison</span>
+          <span class="field-control checkbox-control">
+            <input id="showNull" type="checkbox" checked />
+          </span>
+        </label>
+      </section>
+
+      <section class="sidebar-section">
+        <label class="field-row">
+          <span class="field-label">Optional stopping</span>
+          <span class="field-control checkbox-control"><input id="optionalStopping" type="checkbox" /></span>
+        </label>
+
+        <div id="optionalStoppingOptions" class="section-box" hidden>
+          <label class="field-row">
+            <span class="field-label">Max p</span>
+            <span class="field-control"><input id="maxP" type="text" inputmode="decimal" placeholder="No maximum" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">Increase n</span>
+            <span class="field-control"><input id="increaseN" type="number" value="10" min="1" max="100000" step="1" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">Max n</span>
+            <span class="field-control"><input id="maxN" type="text" inputmode="numeric" placeholder="No maximum" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">Max increases</span>
+            <span class="field-control"><input id="maxIncreases" type="number" value="1" min="0" max="10000" step="1" /></span>
+          </label>
+        </div>
+
+        <label class="field-row">
+          <span class="field-label">Outlier removal</span>
+          <span class="field-control checkbox-control"><input id="outlierRemoval" type="checkbox" /></span>
+        </label>
+
+        <div id="outlierOptions" class="section-box" hidden>
+          <div class="field-row align-start">
+            <span class="field-label">SD cutoffs</span>
+            <span class="field-control cutoff-grid">
+              <label><input type="checkbox" name="outlierCutoff" value="1.5" /> 1.5</label>
+              <label><input type="checkbox" name="outlierCutoff" value="2.0" /> 2.0</label>
+              <label><input type="checkbox" name="outlierCutoff" value="2.5" /> 2.5</label>
+              <label><input type="checkbox" name="outlierCutoff" value="3.0" /> 3.0</label>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <details id="graphDetails" class="graph-details">
+        <summary>Graph Display</summary>
+
+        <div class="field-row align-start">
+          <span class="field-label">Histogram y-axis</span>
+          <span class="field-control radio-stack">
+            <label><input type="radio" name="histScale" value="proportion" checked /> Proportion</label>
+            <label><input type="radio" name="histScale" value="count" /> Count</label>
+          </span>
+        </div>
+
+        <div class="section-box">
+          <div class="section-title">P-value graph</div>
+          <label class="field-row">
+            <span class="field-label">Histogram bar width</span>
+            <span class="field-control"><input id="pBinwidth" type="number" value="0.01" min="0.001" max="1" step="0.01" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">X minimum</span>
+            <span class="field-control"><input id="pXmin" type="number" value="0" min="0" max="1" step="0.01" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">X maximum</span>
+            <span class="field-control"><input id="pXmax" type="number" value="1" min="0" max="1" step="0.01" /></span>
+          </label>
+        </div>
+
+        <div class="section-box">
+          <div class="section-title">Effect-estimate graph</div>
+          <label class="field-row">
+            <span class="field-label">Histogram bar width</span>
+            <span class="field-control"><input id="estimateBinwidth" type="number" value="0.10" min="0.001" max="100000" step="0.05" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">X minimum</span>
+            <span class="field-control"><input id="estimateXmin" type="number" value="-2" step="0.1" /></span>
+          </label>
+          <label class="field-row">
+            <span class="field-label">X maximum</span>
+            <span class="field-control"><input id="estimateXmax" type="number" value="2" step="0.1" /></span>
+          </label>
+        </div>
+      </details>
+    </aside>
+
+    <div id="resizeHandle" class="resize-handle" title="Drag to resize the parameter panel" aria-hidden="true"></div>
+
+    <section class="main-pane" aria-live="polite">
+      <div id="emptyState" class="panel-card empty-state">Set the parameters, then click Run simulation.</div>
+
+      <section id="resultsArea" hidden>
+        <div class="panel-card plot-card">
+          <div class="plot-title-row">
+            <h2>Distribution of simulated p-values</h2>
+          </div>
+          <div id="pHistogram" class="facet-grid"></div>
+          <div class="plot-global-x-label">p-value</div>
+        </div>
+
+        <div class="panel-card plot-card">
+          <div class="plot-title-row">
+            <h2>Sampling distribution of the sample mean</h2>
+          </div>
+          <div id="estimateHistogram" class="facet-grid"></div>
+          <div class="plot-global-x-label">Sample mean</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
