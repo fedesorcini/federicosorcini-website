@@ -374,7 +374,7 @@ function histogramSvg(group, options) {
   if (options.kind === 'p') {
     const shadeLeft = xScale(0);
     const shadeRight = xScale(lastRun.params.alpha);
-    parts.push(`<rect x="${Math.min(shadeLeft, shadeRight)}" y="${M.top}" width="${Math.abs(shadeRight - shadeLeft)}" height="${plotH}" fill="#324C63" opacity="0.10"/>`);
+    parts.push(`<rect x="${Math.min(shadeLeft, shadeRight)}" y="${M.top}" width="${Math.abs(shadeRight - shadeLeft)}" height="${plotH}" fill="#C4662F" opacity="0.10"/>`);
   }
 
   for (let i = 0; i < hist.bins.length; i += 1) {
@@ -393,7 +393,7 @@ function histogramSvg(group, options) {
   const refX = options.kind === 'p' ? lastRun.params.alpha : 0;
   if (refX >= options.xmin && refX <= options.xmax) {
     const x = xScale(refX);
-    parts.push(`<line x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}" stroke="#28343D" stroke-width="1.6" stroke-dasharray="7 5"/>`);
+    parts.push(`<line x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}" stroke="#C4662F" stroke-width="2" stroke-dasharray="7 5"/>`);
   }
 
   parts.push('</g>');
