@@ -393,7 +393,7 @@ function histogramSvg(group, options) {
   const refX = options.kind === 'p' ? lastRun.params.alpha : 0;
   if (refX >= options.xmin && refX <= options.xmax) {
     const x = xScale(refX);
-    parts.push(`<line x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}" stroke="#C4662F" stroke-width="2" stroke-dasharray="7 5"/>`);
+    parts.push(`<line x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}" stroke="#d1550d" stroke-width="2" stroke-dasharray="7 5"/>`);
   }
 
   parts.push('</g>');
