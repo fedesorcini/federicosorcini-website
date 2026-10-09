@@ -30,6 +30,12 @@ const els = {
   newObjectType: $('newObjectType'),
   newObjectText: $('newObjectText'),
   newObjectColor: $('newObjectColor'),
+  newShapeRow: null,
+  newShapeType: null,
+  newVisionRow: null,
+  newVisionType: null,
+  newImageRow: null,
+  newImageKey: null,
   newOrientationRow: null,
   newOrientationDeg: null,
   newGaborFrequencyRow: null,
@@ -138,6 +144,50 @@ const MAX_STIMULUS_TEXTURE_DIM = 2048;
 const MIN_STIMULUS_TEXTURE_DIM = 96;
 const stimulusSourceCache = new Map();
 
+const IMAGE_LIBRARY = {
+  apple: {
+    label: 'Apple',
+    src: '/tools/real-depth/images/apple.png',
+  },
+  mug: {
+    label: 'Mug',
+    src: '/tools/real-depth/images/mug.png',
+  },
+  stapler: {
+    label: 'Stapler',
+    src: '/tools/real-depth/images/stapler.png',
+  },
+  banana: {
+    label: 'Banana',
+    src: '/tools/real-depth/images/banana.png',
+  },
+};
+const stimulusImageCache = new Map();
+
+function getStimulusImage(imageKey) {
+  const key = IMAGE_LIBRARY[imageKey] ? imageKey : 'apple';
+  const existing = stimulusImageCache.get(key);
+  if (existing) return existing;
+
+  const img = new Image();
+  img.decoding = 'async';
+  img.alt = '';
+  img.onload = () => {
+    for (const obj of state.objects) {
+      if (obj.type === 'image' && obj.imageKey === key) {
+        refreshObjectStimulus(obj);
+      }
+    }
+    markDirty();
+  };
+  img.onerror = () => {
+    console.warn(`Could not load simulator image asset: ${IMAGE_LIBRARY[key].src}`);
+  };
+  img.src = IMAGE_LIBRARY[key].src;
+  stimulusImageCache.set(key, img);
+  return img;
+}
+
 // Keyboard movement controls. A key press moves once immediately. If the key
 // remains held, repeating begins after 300 ms and continues at a steady rate.
 const KEYBOARD_NUDGE_ANGLE_DEG = 0.25;
@@ -168,24 +218,68 @@ function markDirty() {
 }
 
 function installStimulusUi() {
-  // Add the extra stimulus types and controls without requiring a separate
-  // HTML replacement. These are inserted into the existing Add object and
-  // Selected object panels at startup.
-  const ensureTypeOption = (value, label) => {
-    if (!Array.from(els.newObjectType.options).some(option => option.value === value)) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = label;
-      els.newObjectType.appendChild(option);
-    }
-  };
+  // The first dropdown is a broad category. A second control appears beneath
+  // it when that category contains multiple stimulus choices.
+  els.newObjectType.innerHTML = `
+    <option value="text">Text</option>
+    <option value="shapes">Shapes</option>
+    <option value="vision">Vision science stimuli</option>
+    <option value="images">Images</option>
+  `;
 
-  ensureTypeOption('gabor', 'Gabor patch');
-  ensureTypeOption('arrow', 'Arrow');
+  const categoryLabel = els.newObjectType.closest('label')?.querySelector('.label-text');
+  if (categoryLabel) categoryLabel.textContent = 'Category';
 
-  // Orientation applies to every stimulus. 0° is the native orientation;
-  // positive angles rotate counterclockwise on screen. For a Gabor, 0° means
-  // vertical bars. For an arrow, 0° points right.
+  const textLabel = els.newObjectText.closest('label');
+  const textLabelText = textLabel?.querySelector('.label-text');
+  if (textLabelText) textLabelText.textContent = 'Text';
+
+  if (!document.getElementById('newShapeType')) {
+    const row = document.createElement('label');
+    row.id = 'newShapeRow';
+    row.innerHTML = `
+      <span class="label-text">Shape</span>
+      <select id="newShapeType">
+        <option value="circle">Circle</option>
+        <option value="triangle">Triangle</option>
+        <option value="square">Square</option>
+      </select>
+    `;
+    textLabel?.insertAdjacentElement('beforebegin', row);
+  }
+
+  if (!document.getElementById('newVisionType')) {
+    const row = document.createElement('label');
+    row.id = 'newVisionRow';
+    row.innerHTML = `
+      <span class="label-text">Stimulus</span>
+      <select id="newVisionType">
+        <option value="gabor">Gabor patch</option>
+        <option value="arrow">Arrow</option>
+        <option value="landolt">Landolt C</option>
+      </select>
+    `;
+    textLabel?.insertAdjacentElement('beforebegin', row);
+  }
+
+  if (!document.getElementById('newImageKey')) {
+    const row = document.createElement('label');
+    row.id = 'newImageRow';
+    row.innerHTML = `
+      <span class="label-text">Image</span>
+      <select id="newImageKey">
+        <option value="apple">Apple</option>
+        <option value="mug">Mug</option>
+        <option value="stapler">Stapler</option>
+        <option value="banana">Banana</option>
+      </select>
+      <small class="helper">PNG assets from /tools/real-depth/images/</small>
+    `;
+    textLabel?.insertAdjacentElement('beforebegin', row);
+  }
+
+  // Orientation applies to every stimulus. 0° is its native orientation:
+  // arrow points right, Landolt C gap points right, and Gabor bars are vertical.
   if (!document.getElementById('newOrientationDeg')) {
     const row = document.createElement('label');
     row.id = 'newOrientationRow';
@@ -195,10 +289,9 @@ function installStimulusUi() {
         <input id="newOrientationDeg" type="number" min="0" max="359.9" step="1" value="0" />
         <span>deg</span>
       </span>
-      <small class="helper">0° = native; arrow points right; Gabor bars are vertical; positive = counterclockwise</small>
+      <small class="helper">0° = native; positive = counterclockwise</small>
     `;
-    const textLabel = els.newObjectText.closest('label');
-    if (textLabel) textLabel.insertAdjacentElement('afterend', row);
+    textLabel?.insertAdjacentElement('afterend', row);
   }
 
   if (!document.getElementById('newGaborFrequencyCpd')) {
@@ -213,9 +306,15 @@ function installStimulusUi() {
       <small class="helper">Carrier frequency in cycles per degree of visual angle</small>
     `;
     const orientationRow = document.getElementById('newOrientationRow');
-    if (orientationRow) orientationRow.insertAdjacentElement('afterend', row);
+    orientationRow?.insertAdjacentElement('afterend', row);
   }
 
+  els.newShapeRow = $('newShapeRow');
+  els.newShapeType = $('newShapeType');
+  els.newVisionRow = $('newVisionRow');
+  els.newVisionType = $('newVisionType');
+  els.newImageRow = $('newImageRow');
+  els.newImageKey = $('newImageKey');
   els.newOrientationRow = $('newOrientationRow');
   els.newOrientationDeg = $('newOrientationDeg');
   els.newGaborFrequencyRow = $('newGaborFrequencyRow');
@@ -230,7 +329,7 @@ function installStimulusUi() {
         <input id="objOrientationDeg" type="number" min="0" max="359.9" step="1" />
         <span>deg</span>
       </span>
-      <small class="helper">0° = native; arrow points right; Gabor bars are vertical; positive = counterclockwise</small>
+      <small class="helper">0° = native; positive = counterclockwise</small>
     `;
     els.objTextRow.insertAdjacentElement('afterend', row);
   }
@@ -247,7 +346,7 @@ function installStimulusUi() {
       <small class="helper">Carrier frequency in cycles per degree of visual angle</small>
     `;
     const orientationRow = document.getElementById('objOrientationRow');
-    if (orientationRow) orientationRow.insertAdjacentElement('afterend', row);
+    orientationRow?.insertAdjacentElement('afterend', row);
   }
 
   els.objOrientationRow = $('objOrientationRow');
@@ -323,8 +422,9 @@ function installScenePersistenceUi() {
     const duplicateButton = document.createElement('button');
     duplicateButton.id = 'duplicateObjectBtn';
     duplicateButton.type = 'button';
-    // Match the Set Object as Focus button's color scheme/style.
-    duplicateButton.className = els.setFocusBtn?.className || deleteButton.className || 'button';
+    // Keep Duplicate identical to Delete in height, padding, and typography,
+    // while giving it the same blue/cream color treatment as Set Object as Focus.
+    duplicateButton.className = `${deleteButton.className || 'icon-button'} duplicate-focus-color`.trim();
     duplicateButton.textContent = 'Duplicate';
     duplicateButton.title = 'Duplicate the selected object';
 
@@ -585,18 +685,13 @@ function installWorkspaceLayoutStyles() {
     }
 
     .scene-reset-button,
+    .scene-clear-button,
+    .scene-save-button,
+    .scene-save-download,
     .scene-load-button {
       border: 1px solid var(--navy, var(--accent, #324C63));
       background: var(--navy, var(--accent, #324C63));
       color: var(--cream, #F0E8D8);
-    }
-
-    .scene-clear-button,
-    .scene-save-button,
-    .scene-save-download {
-      border: 1px solid var(--navy, var(--accent, #324C63));
-      background: transparent;
-      color: var(--navy, var(--accent, #324C63));
     }
 
     .scene-save-group {
@@ -699,6 +794,18 @@ function installWorkspaceLayoutStyles() {
       width: auto;
     }
 
+    .duplicate-focus-color {
+      border-color: var(--navy, var(--accent, #324C63)) !important;
+      background: var(--navy, var(--accent, #324C63)) !important;
+      color: var(--cream, #F0E8D8) !important;
+    }
+
+    .duplicate-focus-color:hover {
+      border-color: var(--navy, var(--accent, #324C63)) !important;
+      background: var(--navy, var(--accent, #324C63)) !important;
+      color: var(--cream, #F0E8D8) !important;
+    }
+
     .scene-clear-button:hover,
     .scene-load-button:hover,
     .scene-save-button:hover,
@@ -746,20 +853,43 @@ function normalizedGaborFrequencyCpd(value) {
   return clamp(n, 0.1, 10);
 }
 
-function updateNewObjectControls() {
-  const type = els.newObjectType.value;
-  const isLetter = type === 'letter';
-  const isGabor = type === 'gabor';
+function selectedNewStimulusDefinition() {
+  const category = els.newObjectType.value;
 
-  els.newObjectText.disabled = !isLetter;
+  if (category === 'shapes') {
+    return { type: els.newShapeType?.value || 'circle', imageKey: null };
+  }
+  if (category === 'vision') {
+    return { type: els.newVisionType?.value || 'gabor', imageKey: null };
+  }
+  if (category === 'images') {
+    return { type: 'image', imageKey: els.newImageKey?.value || 'apple' };
+  }
+  return { type: 'letter', imageKey: null };
+}
+
+function updateNewObjectControls() {
+  const category = els.newObjectType.value;
+  const { type } = selectedNewStimulusDefinition();
+
+  if (els.newShapeRow) els.newShapeRow.style.display = category === 'shapes' ? 'block' : 'none';
+  if (els.newVisionRow) els.newVisionRow.style.display = category === 'vision' ? 'block' : 'none';
+  if (els.newImageRow) els.newImageRow.style.display = category === 'images' ? 'block' : 'none';
+
+  const textRow = els.newObjectText.closest('label');
+  if (textRow) textRow.style.display = category === 'text' ? 'block' : 'none';
+  els.newObjectText.disabled = category !== 'text';
+
   if (els.newOrientationDeg) els.newOrientationDeg.disabled = false;
+
+  const isGabor = type === 'gabor';
   if (els.newGaborFrequencyRow) els.newGaborFrequencyRow.style.display = isGabor ? 'block' : 'none';
   if (els.newGaborFrequencyCpd) els.newGaborFrequencyCpd.disabled = !isGabor;
 
-  // The Gabor is achromatic; the color picker remains available for letters,
-  // arrows, and geometric shapes.
-  if (els.newObjectColor) els.newObjectColor.disabled = isGabor;
+  // Image pixels and the achromatic Gabor are not recolored by the color picker.
+  if (els.newObjectColor) els.newObjectColor.disabled = isGabor || type === 'image';
 }
+
 
 function showViewportMessage(message) {
   if (!message) {
@@ -1451,6 +1581,46 @@ function makeSharpStimulusCanvas(obj, widthPx, heightPx) {
     return canvas;
   }
 
+  if (obj.type === 'image') {
+    const key = IMAGE_LIBRARY[obj.imageKey] ? obj.imageKey : 'apple';
+    const img = getStimulusImage(key);
+    if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      // Preserve the PNG's intrinsic aspect ratio and center it inside the
+      // requested stimulus rectangle without cropping.
+      const scale = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+      const drawW = img.naturalWidth * scale;
+      const drawH = img.naturalHeight * scale;
+      const drawX = (canvas.width - drawW) / 2;
+      const drawY = (canvas.height - drawH) / 2;
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    }
+    return canvas;
+  }
+
+  if (obj.type === 'landolt') {
+    const w = canvas.width;
+    const h = canvas.height;
+    const d = Math.max(2, Math.min(w, h));
+    const cx = w / 2;
+    const cy = h / 2;
+
+    // Conventional 5:1 Landolt-C geometry: stroke width is one fifth of the
+    // outside diameter and the gap is approximately one stroke width.
+    const stroke = d / 5;
+    const radius = (d - stroke) / 2;
+    const gapHalfAngle = Math.asin(Math.min(0.99, (stroke / 2) / radius));
+
+    ctx.save();
+    ctx.strokeStyle = normalizeHexColor(obj.color, '#111111');
+    ctx.lineWidth = stroke;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, gapHalfAngle, Math.PI * 2 - gapHalfAngle, false);
+    ctx.stroke();
+    ctx.restore();
+    return canvas;
+  }
+
   if (obj.type === 'gabor') {
     const source = makeGaborSourceCanvas(obj, canvas.width, canvas.height);
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
@@ -1762,6 +1932,7 @@ function newObject({
   angleYDeg = 3,
   orientationDeg = 0,
   spatialFrequencyCpd = 1.5,
+  imageKey = null,
 }) {
   const id = state.nextId++;
 
@@ -1788,6 +1959,7 @@ function newObject({
     angleYDeg,
     orientationDeg: normalizedOrientationDeg(orientationDeg),
     spatialFrequencyCpd: normalizedGaborFrequencyCpd(spatialFrequencyCpd),
+    imageKey: type === 'image' && IMAGE_LIBRARY[imageKey] ? imageKey : null,
     group: null,
     visualMesh: null,
     pickMesh: null,
@@ -1847,6 +2019,7 @@ function sceneObjectSnapshot(obj) {
     angleYDeg: obj.angleYDeg,
     orientationDeg: obj.orientationDeg ?? 0,
     spatialFrequencyCpd: obj.spatialFrequencyCpd ?? 1.5,
+    imageKey: obj.imageKey ?? null,
   };
 }
 
@@ -1975,7 +2148,7 @@ function applyLoadedSceneData(data) {
   updateCameraAndCalibration();
   clearObjects();
 
-  const allowedTypes = new Set(['letter', 'square', 'circle', 'triangle', 'gabor', 'arrow']);
+  const allowedTypes = new Set(['letter', 'square', 'circle', 'triangle', 'gabor', 'arrow', 'landolt', 'image']);
   const loadedObjects = [];
 
   for (const saved of data.objects.slice(0, 250)) {
@@ -1992,7 +2165,14 @@ function applyLoadedSceneData(data) {
     const obj = newObject({
       type,
       text: String(saved.text ?? 'A').slice(0, 12),
-      name: safeName(saved.name, type === 'letter' ? String(saved.text ?? 'A').slice(0, 12) : 'Object'),
+      name: safeName(
+        saved.name,
+        type === 'letter'
+          ? String(saved.text ?? 'A').slice(0, 12)
+          : type === 'image'
+            ? (IMAGE_LIBRARY[saved.imageKey]?.label || 'Image')
+            : 'Object'
+      ),
       color: normalizeHexColor(saved.color, '#111111'),
       distanceM,
       positionXDeg: finiteSceneNumber(saved.positionXDeg, 0),
@@ -2004,6 +2184,7 @@ function applyLoadedSceneData(data) {
       angleYDeg: clamp(finiteSceneNumber(saved.angleYDeg, 3), 0.01, 90),
       orientationDeg: normalizedOrientationDeg(saved.orientationDeg ?? 0),
       spatialFrequencyCpd: normalizedGaborFrequencyCpd(saved.spatialFrequencyCpd ?? 1.5),
+      imageKey: type === 'image' && IMAGE_LIBRARY[saved.imageKey] ? saved.imageKey : 'apple',
     });
 
     loadedObjects.push(obj);
@@ -2060,6 +2241,7 @@ function duplicateSelectedObject() {
     angleYDeg: source.angleYDeg,
     orientationDeg: source.orientationDeg ?? 0,
     spatialFrequencyCpd: source.spatialFrequencyCpd ?? 1.5,
+    imageKey: source.imageKey ?? null,
   });
 
   state.selectedId = copy.id;
@@ -2150,8 +2332,13 @@ function resetAll() {
   els.roomBrightness.value = DEFAULTS.room.brightness.toFixed(2);
 
   els.newObjectColor.value = '#111111';
+  if (els.newObjectType) els.newObjectType.value = 'text';
+  if (els.newShapeType) els.newShapeType.value = 'circle';
+  if (els.newVisionType) els.newVisionType.value = 'gabor';
+  if (els.newImageKey) els.newImageKey.value = 'apple';
   if (els.newOrientationDeg) els.newOrientationDeg.value = '0';
   if (els.newGaborFrequencyCpd) els.newGaborFrequencyCpd.value = '1.5';
+  updateNewObjectControls();
 
   buildRoom();
   updateCameraAndCalibration();
@@ -2485,7 +2672,7 @@ function refreshSelectedObjectEditor() {
   if (els.objOrientationDeg) els.objOrientationDeg.disabled = false;
   if (els.objGaborFrequencyCpd) els.objGaborFrequencyCpd.disabled = obj.type !== 'gabor';
   els.sizeLockMode.disabled = false;
-  els.objColor.disabled = obj.type === 'gabor';
+  els.objColor.disabled = obj.type === 'gabor' || obj.type === 'image';
   els.objDistanceM.disabled = false;
   els.objXDeg.disabled = false;
   els.objYDeg.disabled = false;
@@ -2665,7 +2852,7 @@ function commitSelectedFromEditor(field, { refreshEditor = true } = {}) {
   } else if (field === 'text' && obj.type === 'letter') {
     obj.text = String(els.objText.value || 'A').slice(0, 12);
     if (!obj.text) obj.text = 'A';
-  } else if (field === 'color' && obj.type !== 'gabor') {
+  } else if (field === 'color' && obj.type !== 'gabor' && obj.type !== 'image') {
     obj.color = normalizeHexColor(els.objColor.value, obj.color || '#111111');
   } else if (field === 'orientation') {
     obj.orientationDeg = normalizedOrientationDeg(numberValue(els.objOrientationDeg, obj.orientationDeg ?? 0));
@@ -2838,26 +3025,38 @@ function onMovementKeyUp(event) {
 }
 
 function addObjectFromControls() {
-  const type = els.newObjectType.value;
-  const text = safeName(els.newObjectText.value, 'A').slice(0, 12);
+  const { type, imageKey } = selectedNewStimulusDefinition();
+  const textValue = safeName(els.newObjectText.value, 'A').slice(0, 12);
   const color = normalizeHexColor(els.newObjectColor.value, '#111111');
   const orientationDeg = normalizedOrientationDeg(numberValue(els.newOrientationDeg, 0));
   const spatialFrequencyCpd = type === 'gabor'
     ? normalizedGaborFrequencyCpd(numberValue(els.newGaborFrequencyCpd, 1.5))
     : 1.5;
+
   const room = currentRoom();
   const baseDistance = focusedObject()?.distanceM ?? Math.min(1.25, room.depthM * 0.4);
   const offsetIndex = state.objects.length % 5;
   const newDistanceM = clamp(baseDistance + 0.2 * (offsetIndex - 2), 0.2, room.depthM - 0.1);
-  // Most new stimuli begin at 3° × 3°. Arrows start wider and thinner so
-  // their native 0° appearance matches a conventional right-pointing cue.
-  const initialAngleXDeg = type === 'arrow' ? 4.0 : 3.0;
-  const initialAngleYDeg = type === 'arrow' ? 1.0 : 3.0;
+
+  let initialAngleXDeg = 3.0;
+  let initialAngleYDeg = 3.0;
+  if (type === 'arrow') {
+    initialAngleXDeg = 4.0;
+    initialAngleYDeg = 1.0;
+  }
+
+  const imageLabel = imageKey && IMAGE_LIBRARY[imageKey] ? IMAGE_LIBRARY[imageKey].label : 'Image';
+  const baseName =
+    type === 'letter' ? textValue :
+    type === 'image' ? imageLabel :
+    type === 'landolt' ? 'Landolt C' :
+    type === 'gabor' ? 'Gabor patch' :
+    `${type[0].toUpperCase()}${type.slice(1)}`;
 
   const obj = newObject({
     type,
-    text,
-    name: type === 'letter' ? text : `${type[0].toUpperCase()}${type.slice(1)} ${state.nextId}`,
+    text: textValue,
+    name: type === 'letter' ? textValue : `${baseName} ${state.nextId}`,
     color,
     distanceM: newDistanceM,
     positionXDeg: (offsetIndex - 2) * 4.0,
@@ -2869,7 +3068,9 @@ function addObjectFromControls() {
     angleYDeg: initialAngleYDeg,
     orientationDeg,
     spatialFrequencyCpd,
+    imageKey,
   });
+
   state.selectedId = obj.id;
   if (!state.focusedId) state.focusedId = obj.id;
   refreshAllStimulusTextures();
@@ -2877,6 +3078,7 @@ function addObjectFromControls() {
   refreshUi();
   markDirty();
 }
+
 
 function deleteSelectedObject() {
   const obj = selectedObject();
@@ -2948,6 +3150,9 @@ function bindEvents() {
   }
 
   els.newObjectType.addEventListener('change', updateNewObjectControls);
+  els.newShapeType?.addEventListener('change', updateNewObjectControls);
+  els.newVisionType?.addEventListener('change', updateNewObjectControls);
+  els.newImageKey?.addEventListener('change', updateNewObjectControls);
   els.addObjectBtn.addEventListener('click', addObjectFromControls);
   els.resetSceneBtn.addEventListener('click', () => {
     setSaveControlsExpanded(false);
