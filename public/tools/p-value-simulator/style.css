@@ -62,21 +62,25 @@ button, input, select { min-height: 36px; }
 .sim-layout {
   display: flex;
   width: 100%;
-  align-items: stretch;
+  align-items: flex-start;
   min-height: calc(100vh - 94px);
+  padding: 18px 18px 32px;
+  background: var(--white);
 }
 
 .sidebar-pane {
-  flex: 0 0 310px;
-  width: 310px;
-  min-width: 240px;
+  flex: 0 0 330px;
+  width: 330px;
+  min-width: 255px;
   max-width: 650px;
-  align-self: stretch;
+  align-self: flex-start;
   background: var(--navy);
-  border-right: 1px solid rgba(255,255,255,0.12);
-  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 16px 17px 18px;
   overflow-x: hidden;
   color: var(--white);
+  box-shadow: 0 3px 12px rgba(30, 45, 58, 0.10);
 }
 
 .sidebar-pane h2,
@@ -89,29 +93,36 @@ button, input, select { min-height: 36px; }
 }
 
 .sidebar-section {
-  padding: 4px 0 14px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.24);
+  padding: 3px 0 12px;
+  margin-bottom: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.20);
 }
 
 .sidebar-section h2 {
-  margin: 7px 0 12px;
-  font-size: 1.05rem;
+  margin: 4px 0 9px;
+  font-size: 1rem;
+  line-height: 1.18;
+  font-weight: 700;
 }
 
 .study-type {
-  margin: -3px 0 14px;
+  margin: 0 0 13px;
+  font-size: 0.91rem;
+  line-height: 1.25;
   font-weight: 700;
 }
 
 .run-button {
   width: 100%;
-  min-height: 42px;
-  margin: 0 0 12px;
+  min-height: 46px;
+  margin: 0 0 16px;
+  padding: 9px 12px;
   border: 1px solid var(--cream-dark);
-  border-radius: 5px;
+  border-radius: 9px;
   background: var(--cream-dark);
   color: #111;
+  font-size: 0.98rem;
+  line-height: 1.15;
   font-weight: 700;
   cursor: pointer;
 }
@@ -150,15 +161,15 @@ button, input, select { min-height: 36px; }
 
 .field-row {
   display: grid;
-  grid-template-columns: minmax(105px, 42%) minmax(0, 58%);
-  column-gap: 10px;
+  grid-template-columns: minmax(112px, 44%) minmax(0, 56%);
+  column-gap: 12px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 9px;
 }
 .field-row.align-start { align-items: start; }
 .field-label {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.79rem;
   line-height: 1.2;
   text-align: left;
 }
@@ -169,11 +180,14 @@ button, input, select { min-height: 36px; }
 .sidebar-pane select {
   width: 100%;
   min-width: 0;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 6px 9px;
   border: 1px solid #c7cdd2;
-  border-radius: 4px;
+  border-radius: 6px;
   color: #222;
   background: #fff;
+  font-size: 0.90rem;
+  line-height: 1.2;
 }
 .sidebar-pane input::placeholder { color: #777; }
 .sidebar-pane input:focus,
@@ -187,7 +201,11 @@ button, input, select { min-height: 36px; }
 .checkbox-control { display: flex; align-items: center; }
 .checkbox-control input,
 .cutoff-grid input,
-.radio-stack input { min-height: auto; }
+.radio-stack input {
+  min-height: auto;
+  width: 17px;
+  height: 17px;
+}
 
 .range-control {
   display: grid;
@@ -197,11 +215,11 @@ button, input, select { min-height: 36px; }
 }
 .range-control input[type='range'] { width: 100%; min-width: 0; }
 .range-control output {
-  min-width: 42px;
+  min-width: 43px;
   text-align: right;
   color: var(--white);
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.80rem;
 }
 
 .alpha-control {
@@ -213,10 +231,11 @@ button, input, select { min-height: 36px; }
   grid-column: 1;
   grid-row: 2;
   position: relative;
-  height: 22px;
-  margin: -3px 5px 0;
-  font-size: 10px;
-  color: rgba(255,255,255,0.92);
+  height: 20px;
+  margin: -2px 3px 0;
+  font-size: 0.56rem;
+  line-height: 1;
+  color: rgba(255,255,255,0.88);
 }
 .alpha-tick {
   position: absolute;
@@ -236,15 +255,15 @@ button, input, select { min-height: 36px; }
 .alpha-tick.last { transform: translateX(-100%); text-align: right; }
 
 .section-box {
-  padding: 12px;
-  margin: 10px 0 12px;
-  border: 1px solid rgba(255,255,255,0.28);
+  padding: 10px;
+  margin: 8px 0 11px;
+  border: 1px solid rgba(255,255,255,0.24);
   border-radius: 8px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.07);
 }
 .section-title {
-  margin-bottom: 10px;
-  font-size: 15px;
+  margin-bottom: 8px;
+  font-size: 0.84rem;
   font-weight: 700;
 }
 .cutoff-grid {
@@ -258,16 +277,17 @@ button, input, select { min-height: 36px; }
   align-items: center;
   gap: 5px;
   color: var(--white);
-  font-size: 0.86rem;
+  font-size: 0.79rem;
 }
 .radio-stack { display: grid; gap: 6px; }
 
-.graph-details { margin: 5px 0 10px; }
+.graph-details { margin: 3px 0 2px; }
 .graph-details summary {
   cursor: pointer;
-  font-size: 1.08rem;
+  font-size: 0.94rem;
+  line-height: 1.2;
   font-weight: 700;
-  padding: 4px 0 10px;
+  padding: 3px 0 7px;
   user-select: none;
   list-style: none;
 }
@@ -282,21 +302,21 @@ button, input, select { min-height: 36px; }
 .graph-details[open] summary::before { content: '▼'; }
 
 .resize-handle {
-  flex: 0 0 10px;
+  flex: 0 0 12px;
   cursor: col-resize;
   position: relative;
   align-self: stretch;
-  background: var(--white);
+  background: transparent;
 }
 .resize-handle::after {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  left: 5px;
   width: 2px;
   border-radius: 2px;
-  background: rgba(50,76,99,0.30);
+  background: rgba(50,76,99,0.20);
 }
 .resize-handle:hover::after,
 body.resizing .resize-handle::after {
@@ -309,7 +329,7 @@ body.resizing { cursor: col-resize !important; user-select: none; }
 .main-pane {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 16px 18px 36px 12px;
+  padding: 0 0 36px 8px;
   background: var(--white);
 }
 
@@ -382,15 +402,20 @@ body.resizing { cursor: col-resize !important; user-select: none; }
 @media (max-width: 767px) {
   .app-header { align-items: flex-start; padding: 17px 18px; }
   .app-header { flex-direction: column; }
-  .sim-layout { display: block; min-height: 0; }
+  .sim-layout {
+    display: block;
+    min-height: 0;
+    padding: 14px;
+  }
   .sidebar-pane {
     width: 100% !important;
     max-width: none;
     min-width: 0;
-    border-right: 0;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
   }
   .resize-handle { display: none; }
-  .main-pane { padding: 14px; }
+  .main-pane { padding: 14px 0 0; }
 }
 
 @media (max-width: 430px) {
@@ -398,3 +423,11 @@ body.resizing { cursor: col-resize !important; user-select: none; }
   .range-control { grid-template-columns: minmax(0,1fr) auto; }
   .cutoff-grid { grid-template-columns: repeat(4, auto); justify-content: start; }
 }
+
+
+/* Compact sidebar rhythm to match the Real Depth Simulator controls. */
+.sidebar-pane > .sidebar-section:first-of-type { padding-top: 1px; }
+.sidebar-pane .field-row:last-child { margin-bottom: 0; }
+.sidebar-pane .range-row { margin-top: 2px; margin-bottom: 11px; }
+.sidebar-pane input[type='range'] { min-height: 30px; }
+.sidebar-pane hr { border: 0; border-top: 1px solid rgba(255,255,255,0.20); }
