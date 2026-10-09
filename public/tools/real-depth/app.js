@@ -1604,19 +1604,32 @@ function makeSharpStimulusCanvas(obj, widthPx, heightPx) {
     const cx = w / 2;
     const cy = h / 2;
 
-    // Conventional 5:1 Landolt-C geometry: stroke width is one fifth of the
-    // outside diameter and the gap is approximately one stroke width.
+    // Standard Landolt-C geometry:
+    // - outer diameter = requested stimulus height/width
+    // - stroke width = one fifth of the outer diameter
+    // - gap width = one fifth of the outer diameter
+    // The opening is formed by a rectangular horizontal slot so the cut-out
+    // edges are exactly parallel to the top/bottom of the stimulus when the
+    // native orientation is 0° (gap pointing right). Generic orientation is
+    // still applied later by the object group rotation.
     const stroke = d / 5;
-    const radius = (d - stroke) / 2;
-    const gapHalfAngle = Math.asin(Math.min(0.99, (stroke / 2) / radius));
+    const outerRadius = d / 2;
+    const innerRadius = outerRadius - stroke;
+    const gapHeight = stroke;
 
     ctx.save();
-    ctx.strokeStyle = normalizeHexColor(obj.color, '#111111');
-    ctx.lineWidth = stroke;
-    ctx.lineCap = 'butt';
+    ctx.fillStyle = normalizeHexColor(obj.color, '#111111');
+
+    // Draw the annulus.
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, gapHalfAngle, Math.PI * 2 - gapHalfAngle, false);
-    ctx.stroke();
+    ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2, false);
+    ctx.arc(cx, cy, innerRadius, 0, Math.PI * 2, true);
+    ctx.fill('evenodd');
+
+    // Punch out the gap with perfectly parallel horizontal edges.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(cx, cy - gapHeight / 2, outerRadius + stroke, gapHeight);
+
     ctx.restore();
     return canvas;
   }
