@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore repeated-measures data with animated, pivot-style bar charts.">
+  <title>Data Visualization Studio</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-heading">
+      <div class="brand-overline">INTERACTIVE RESEARCH TOOLS <span class="title-separator">/</span> VISUALIZATION</div>
+      <h1>Data Visualization Studio</h1>
+      <p>Build beautiful graphs from repeated-measures data. Watch factors split, regroup, and recombine.</p>
+    </div>
+    <a class="header-link" href="/tools" id="backLink">← Back to Tools</a>
+  </header>
+
+  <main class="studio-layout">
+    <aside class="sidebar-pane sidebar-left" aria-label="Data and filtering controls">
+      <details class="sidebar-section collapsible-section upload-section" id="uploadSection" open>
+        <summary class="section-heading"><span class="section-number">01</span><h2>Your data</h2><span class="collapse-chevron" aria-hidden="true"></span></summary>
+        <div class="section-content">
+        <label class="upload-zone" id="uploadZone" for="csvInput" tabindex="0" role="button">
+          <span class="upload-icon" aria-hidden="true">↑</span>
+          <span class="upload-title">Drop a CSV here or browse</span>
+          <span class="upload-caption">Your data stays in this browser</span>
+        </label>
+        <input id="csvInput" type="file" accept=".csv,text/csv,text/plain" hidden>
+        <div class="upload-footer">
+          <span id="dataFilename" class="file-name">No file selected</span>
+          <button id="loadDemo" class="subtle-button" type="button">Try example data ↗</button>
+        </div>
+        <p id="uploadError" class="error-note" role="alert" hidden></p>
+        </div>
+      </details>
+
+      <details class="sidebar-section collapsible-section" id="designSection" open>
+        <summary class="section-heading"><span class="section-number">02</span><h2>Measure &amp; design</h2><span class="collapse-chevron" aria-hidden="true"></span></summary>
+        <div class="section-content">
+        <label class="stacked-field" for="subjectSelect"><span>Participant / subject ID <span class="required">*</span></span>
+          <select id="subjectSelect" disabled><option value="">Upload data first</option></select>
+        </label>
+        <label class="stacked-field" for="measureSelect"><span>Value to plot <span class="required">*</span></span>
+          <select id="measureSelect" disabled><option value="">Upload data first</option></select>
+        </label>
+        <div class="field-pair">
+          <label class="stacked-field" for="statSelect"><span>Summarize values</span>
+            <select id="statSelect"><option value="mean">Mean</option><option value="sd">Std. deviation</option><option value="variance">Variance</option><option value="max">Maximum</option><option value="min">Minimum</option><option value="median">Median</option></select>
+          </label>
+          <label class="stacked-field" for="errorSelect"><span>Error bars</span>
+            <select id="errorSelect"><option value="none">None</option><option value="sem">± SEM</option><option value="sd">± SD</option><option value="ci">95% CI</option></select>
+          </label>
+        </div>
+        <p class="sidebar-hint">Repeated-measures aware: trials are averaged within each participant and condition first.</p>
+        </div>
+      </details>
+
+      <section class="sidebar-section">
+        <div class="section-heading"><span class="section-number">04</span><h2>Filters</h2></div>
+        <p class="section-description">Excel-style checkbox filters. Uncheck values to exclude matching rows.</p>
+        <div id="filterList" class="filter-list"><p class="empty-mini">All rows included.</p></div>
+        <div class="add-row">
+          <select id="addFilterSelect" aria-label="Choose column to filter" disabled><option value="">Select a column…</option></select>
+          <button id="addFilterButton" class="small-action" type="button" disabled>+ Filter</button>
+        </div>
+      </section>
+      <div class="sidebar-bottom"><span class="status-dot"></span><span>Local-only analysis · No server required</span></div>
+    </aside>
+
+    <div class="main-pane">
+      <section class="chart-card">
+        <div class="chart-card-header">
+          <div>
+            <p class="eyebrow">BAR CHART <span class="eyebrow-separator">·</span> LIVE VIEW</p>
+            <h2 id="chartHeading">Explore your data</h2>
+            <p id="chartSubtitle" class="chart-subtitle">Upload a CSV or start with a demonstration dataset.</p>
+          </div>
+          <div class="chart-toolbar">
+            <button id="replayAnimation" type="button" class="icon-button" title="Replay the latest split or merge animation" disabled><span aria-hidden="true">↻</span> Replay</button>
+            <button id="exportSvg" type="button" class="icon-button" disabled>↓ SVG</button>
+            <button id="exportPng" type="button" class="icon-button" disabled>↓ PNG</button>
+          </div>
+        </div>
+        <div id="chartEmpty" class="chart-empty">
+          <div class="empty-illustration" aria-hidden="true"><span></span><span></span><span></span><span></span><i></i></div>
+          <h3>Your canvas is ready</h3>
+          <p>Choose a participant column and a numeric measure to see the first bar. Add factors to watch it branch into groups.</p>
+          <button type="button" id="emptyDemo" class="outline-action">Explore with example data →</button>
+        </div>
+        <div id="chartContent" hidden>
+          <div class="chart-stage" id="chartStage"><svg id="chartSvg" role="img" aria-label="Repeated-measures bar chart"></svg></div>
+          <div id="legend" class="factor-legend"></div>
+          <div class="plot-foot" id="plotFoot"></div>
+        </div>
+      </section>
+
+      <div class="metric-grid" id="metrics">
+        <div class="metric-card"><span>ROWS INCLUDED</span><strong id="metricRows">—</strong><small id="metricRowSub">From uploaded data</small></div>
+        <div class="metric-card"><span>PARTICIPANTS</span><strong id="metricSubjects">—</strong><small>Unique IDs included</small></div>
+        <div class="metric-card"><span>PLOTTED BARS</span><strong id="metricBars">—</strong><small>Observed factor combinations</small></div>
+        <div class="metric-card"><span>ACTIVE FACTORS</span><strong id="metricFactors">0</strong><small>Grouping dimensions</small></div>
+      </div>
+
+      <section class="settings-card">
+        <div class="settings-head"><div><p class="eyebrow">FINISHING TOUCHES</p><h2>Chart settings</h2></div><button id="resetStyles" class="subtle-button" type="button">Reset appearances</button></div>
+        <div class="settings-grid">
+          <label class="stacked-field"><span>Chart title</span><input id="customTitle" placeholder="Automatic title" type="text"></label>
+          <label class="stacked-field"><span>Y-axis label</span><input id="customYLabel" placeholder="Automatic label" type="text"></label>
+          <label class="stacked-field"><span>Animation</span><select id="animationSpeed"><option value="450">Quick (450 ms)</option><option value="900">Smooth (900 ms)</option><option selected value="1500">Slow (1,500 ms)</option><option value="0">Off</option></select></label>
+          <label class="stacked-field"><span>Values above bars</span><select id="showValues"><option value="no">Hidden</option><option selected value="yes">Show labels</option></select></label>
+        </div>
+        <div class="settings-footer"><p>Summary and export use participant-level statistics, never raw-trial pooling.</p><button id="exportCsv" class="download-data" type="button" disabled>↓ Download summary CSV</button></div>
+      </section>
+    </div>
+
+    <aside class="sidebar-pane sidebar-right" aria-label="Factor settings">
+      <details class="sidebar-section collapsible-section" id="factorsSection" open>
+        <summary class="section-heading"><span class="section-number">03</span><h2>Factors</h2><span class="collapse-chevron" aria-hidden="true"></span></summary>
+        <div class="section-content">
+        <p class="section-description">Add categorical columns to divide bars. Each factor also controls one visual property.</p>
+        <div id="factorList" class="factor-list"><p class="empty-mini">No factors yet — one overall bar.</p></div>
+        <div class="add-row">
+          <select id="addFactorSelect" aria-label="Choose factor to add" disabled><option value="">Select a factor…</option></select>
+          <button id="addFactorButton" class="small-action" type="button" disabled>+ Add</button>
+        </div>
+        <p class="sidebar-hint">Drag the grip on a factor to change the x-axis grouping order. The first factor is outermost.</p>
+        </div>
+      </details>
+
+    </aside>
+  </main>
+</body>
+</html>

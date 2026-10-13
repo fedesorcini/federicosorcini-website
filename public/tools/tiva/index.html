@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Test of Insufficient Variance (TIVA): enter statistical tests from independent experiments, calculate Z-scores, and examine the variance of reported results.">
+  <title>Test of Insufficient Variance (TIVA)</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="header-title">
+    <h1>Test of Insufficient Variance</h1>
+    <p>Convert reported test statistics to Z scores and test whether their variance is unusually small.</p>
+  </div>
+  <a href="/tools" class="header-link">Back to Tools</a>
+</header>
+<main id="simLayout" class="sim-layout">
+  <aside id="sidebarPane" class="sidebar-pane" aria-label="TIVA settings">
+    <button id="calculate" class="run-button" type="button">Calculate TIVA</button>
+    <div id="statusMessage" class="validation-message" role="alert" hidden></div>
+
+
+
+    <section class="sidebar-section">
+      <h2>Statistical settings</h2>
+      <label class="field-stack">
+        <span class="field-label">Test type for new rows</span>
+        <select id="defaultType">
+          <option value="F" selected>F-test (ANOVA)</option>
+          <option value="t">t-test</option>
+          <option value="chi2">Chi-square test</option>
+          <option value="z">Z statistic</option>
+          <option value="p">Exact p-value</option>
+        </select>
+      </label>
+      <label class="field-stack">
+        <span class="field-label">P-to-Z conversion</span>
+        <select id="tail">
+          <option value="two" selected>Two-sided equivalent</option>
+          <option value="one">One-sided / signed</option>
+        </select>
+        <small id="tailFormula" class="field-description">Z = Φ⁻¹(1 − p/2). Suited to two-sided tests and F(1, df) comparisons.</small>
+      </label>
+      <label class="field-row compact">
+        <span class="field-label">Significance level α</span>
+        <span class="field-control"><input id="alpha" type="number" value="0.05" min="0.001" max="0.25" step="0.01"></span>
+      </label>
+    </section>
+
+
+
+
+
+    <details class="sidebar-details">
+      <summary>How TIVA works</summary>
+      <p>Convert each exact p-value into an equivalent Z-score. Find their <strong>sample variance</strong>, V, using divisor k − 1. Compute χ² = (k − 1)V and a <strong>lower-tail</strong> probability with k − 1 degrees of freedom.</p>
+      <p>A low p-value indicates unusually little between-study variation under the reference model. It does not establish misconduct or replication failure.</p>
+      <p>Choose focal tests independently of their significance and include all eligible experiments. Ideally use comparable tests on independent samples.</p>
+      <a href="https://replicationindex.com/2015/01/01/tiva/" target="_blank" rel="noopener noreferrer">Schimmack (2015) — method ↗</a>
+    </details>
+  </aside>
+  <div id="resizeHandle" class="resize-handle" aria-label="Drag to resize the sidebar"></div>
+
+  <div class="main-pane">
+    <section class="panel-card input-card">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">DATA ENTRY</div>
+          <h2>Experiment results <span id="rowCount" class="count-pill">4 rows</span></h2>
+          <p>Enter the <strong>reported statistic</strong> and its degrees of freedom; exact p and Z are calculated for you. Uncheck a row to exclude it without deleting it.</p>
+        </div>
+        <button id="addRow" class="action-button" type="button"><span aria-hidden="true">＋</span> Add experiment</button>
+      </div>
+      <div class="table-scroll">
+        <table id="dataTable" class="data-table">
+          <thead><tr>
+            <th class="include-head" title="Include this experiment in the TIVA computation">Use</th>
+            <th>Experiment</th><th>Test</th><th>Statistic / p</th><th title="Numerator df for F, df for t and chi-square">df / df₁</th><th title="Denominator df for F">df₂</th><th>Calculated p</th><th>Equivalent Z</th><th aria-label="Delete"></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="dataFootnote">For F tests enter F, numerator df and denominator df. Use exact values, not “p &lt; .05.”</span>
+        <span id="dirtyText" class="dirty-text" hidden>Inputs changed — recalculate</span>
+      </div>
+    </section>
+
+    <section id="results" aria-live="polite">
+      <div class="section-head results-header">
+        <div><div class="eyebrow">ANALYSIS</div><h2>TIVA results</h2></div>
+        <span id="dataTag" class="dataset-tag">Your dataset</span>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">Experiments (k)</div><div id="kMetric" class="metric-value">—</div><div class="metric-caption">Independent tests included</div></div>
+        <div class="metric-card"><div class="metric-label">Observed Z variance</div><div id="varianceMetric" class="metric-value">—</div><div class="metric-caption">Reference variance: 1</div></div>
+        <div class="metric-card"><div class="metric-label">Chi-square statistic</div><div id="chiMetric" class="metric-value">—</div><div id="chiDf" class="metric-caption">Degrees of freedom: —</div></div>
+        <div class="metric-card"><div class="metric-label">Lower-tail p-value</div><div id="pMetric" class="metric-value">—</div><div id="pCaption" class="metric-caption">Test of insufficient variance</div></div>
+      </div>
+      <div class="panel-card interpretation-card">
+        <h3 id="interpretationTitle">Enter results to begin</h3>
+        <p id="interpretationText">The analysis will describe the observed variance and what the lower-tail test does and does not support.</p>
+        <div id="warningList" class="warning-list"></div>
+      </div>
+      <div class="chart-grid">
+        <section class="panel-card chart-card">
+          <div class="chart-heading"><div><h3>Equivalent Z-scores</h3><p>Each included experiment, the mean Z, and the significance threshold</p></div><button id="downloadZ" class="chart-download" type="button">Download SVG ↓</button></div>
+          <div id="zChart" class="svg-host" role="img" aria-label="Experiment Z scores plot"></div>
+        </section>
+        <section class="panel-card chart-card">
+          <div class="chart-heading"><div><h3>Reference distribution of variance</h3><p>Sampling distribution if the population variance is exactly 1</p></div><button id="downloadVariance" class="chart-download" type="button">Download SVG ↓</button></div>
+          <div id="varianceChart" class="svg-host" role="img" aria-label="Theoretical reference variance curve"></div>
+        </section>
+      </div>
+
+    </section>
+    <footer class="app-footer">Based on <a href="https://replicationindex.com/2015/01/01/tiva/" target="_blank" rel="noopener noreferrer">Schimmack (2015), Test of Insufficient Variance</a>. This is an exploratory research assessment, not a definitive test of research integrity.</footer>
+  </div>
+</main>
+<script src="./stats-core.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
