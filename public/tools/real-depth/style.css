@@ -808,3 +808,241 @@ input[type="color"]:disabled {
   background: rgba(240, 232, 216, 0.12);
   color: #F0E8D8;
 }
+
+/* =========================================================
+   STATIC WORKSPACE UI (formerly injected by app.js)
+   ========================================================= */
+
+.collapsible-panel-section {
+  padding: 0 !important;
+}
+
+.collapsible-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapsible-section-toggle:hover {
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.collapsible-section-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+}
+
+.collapsible-section-arrow {
+  flex: 0 0 1rem;
+  width: 1rem;
+  font-size: 0.95em;
+  line-height: 1;
+  text-align: center;
+}
+
+.collapsible-section-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.collapsible-section-body {
+  padding: 0 1rem 1rem;
+}
+
+.collapsible-section-body[hidden] {
+  display: none !important;
+}
+
+.scene-action-bar {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-top: 1px solid var(--border, #d8dde4);
+  background: var(--panel, #ffffff);
+}
+
+.scene-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 0.75rem 0.8rem;
+}
+
+.scene-action-row-bottom {
+  border-top: 1px solid var(--border, #d8dde4);
+}
+
+.scene-action-row .button,
+.scene-save-group .button {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.scene-reset-button,
+.scene-clear-button,
+.scene-save-button,
+.scene-save-download,
+.scene-load-button {
+  border: 1px solid var(--navy, var(--accent, #324C63));
+  background: var(--navy, var(--accent, #324C63));
+  color: var(--cream, #F0E8D8);
+}
+
+.scene-save-group {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  gap: 0;
+}
+
+.scene-save-group .scene-save-button {
+  flex: 1 1 auto;
+  transition:
+    flex-basis 0.2s ease,
+    width 0.2s ease,
+    border-radius 0.2s ease;
+}
+
+.scene-save-name,
+.scene-save-download {
+  display: none;
+}
+
+.scene-save-group.expanded {
+  gap: 0.4rem;
+}
+
+.scene-save-group.expanded .scene-save-button {
+  display: block;
+  flex: 0 0 76px;
+  width: 76px;
+}
+
+.scene-save-group.expanded .scene-save-name {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 0 0.65rem;
+  border: 1px solid var(--border, #d8dde4);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--text, #28343D);
+  font: inherit;
+}
+
+.scene-save-group.expanded .scene-save-name::placeholder {
+  color: #9aa1a8;
+  opacity: 1;
+}
+
+.scene-save-group.expanded .scene-save-name.needs-name {
+  border-color: #9b2c2c;
+  outline: 1px solid #9b2c2c;
+}
+
+.scene-save-group.expanded .scene-save-download {
+  display: inline-flex;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.scene-file-input {
+  display: none !important;
+}
+
+.scene-action-status {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.scene-clear-button:hover,
+.scene-load-button:hover,
+.scene-save-button:hover,
+.scene-save-download:hover,
+.scene-reset-button:hover {
+  transform: translateY(-1px);
+}
+
+.selected-object-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.selected-object-actions .button {
+  width: auto;
+}
+
+.duplicate-focus-color {
+  border-color: var(--navy, var(--accent, #324C63)) !important;
+  background: var(--navy, var(--accent, #324C63)) !important;
+  color: var(--cream, #F0E8D8) !important;
+}
+
+.duplicate-focus-color:hover {
+  border-color: var(--navy, var(--accent, #324C63)) !important;
+  background: var(--navy, var(--accent, #324C63)) !important;
+  color: var(--cream, #F0E8D8) !important;
+}
+
+.scene-clear-button:hover,
+.scene-load-button:hover,
+.scene-save-button:hover,
+.scene-reset-button:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 560px) {
+  .scene-action-row {
+    gap: 0.5rem;
+    padding: 0.65rem;
+  }
+
+  .scene-save-group.expanded .scene-save-button {
+    flex-basis: 64px;
+    width: 64px;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  .scene-save-group.expanded .scene-save-name {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .scene-save-group.expanded .scene-save-download {
+    flex-basis: 40px;
+    width: 40px;
+    min-width: 40px;
+  }
+}
+
+/* Keep initially-hidden controls hidden before JavaScript initializes. */
+[hidden] { display: none !important; }

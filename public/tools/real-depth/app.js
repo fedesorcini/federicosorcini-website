@@ -30,27 +30,27 @@ const els = {
   newObjectType: $('newObjectType'),
   newObjectText: $('newObjectText'),
   newObjectColor: $('newObjectColor'),
-  newShapeRow: null,
-  newShapeType: null,
-  newVisionRow: null,
-  newVisionType: null,
-  newImageRow: null,
-  newImageKey: null,
-  newOrientationRow: null,
-  newOrientationDeg: null,
-  newGaborFrequencyRow: null,
-  newGaborFrequencyCpd: null,
+  newShapeRow: $('newShapeRow'),
+  newShapeType: $('newShapeType'),
+  newVisionRow: $('newVisionRow'),
+  newVisionType: $('newVisionType'),
+  newImageRow: $('newImageRow'),
+  newImageKey: $('newImageKey'),
+  newOrientationRow: $('newOrientationRow'),
+  newOrientationDeg: $('newOrientationDeg'),
+  newGaborFrequencyRow: $('newGaborFrequencyRow'),
+  newGaborFrequencyCpd: $('newGaborFrequencyCpd'),
   addObjectBtn: $('addObjectBtn'),
   resetSceneBtn: $('resetSceneBtn'),
-  clearSceneBtn: null,
+  clearSceneBtn: $('clearSceneBtn'),
   objectList: $('objectList'),
   objName: $('objName'),
   objTextRow: $('objTextRow'),
   objText: $('objText'),
-  objOrientationRow: null,
-  objOrientationDeg: null,
-  objGaborFrequencyRow: null,
-  objGaborFrequencyCpd: null,
+  objOrientationRow: $('objOrientationRow'),
+  objOrientationDeg: $('objOrientationDeg'),
+  objGaborFrequencyRow: $('objGaborFrequencyRow'),
+  objGaborFrequencyCpd: $('objGaborFrequencyCpd'),
   sizeLockMode: $('sizeLockMode'),
   objColor: $('objColor'),
   objWidthCm: $('objWidthCm'),
@@ -62,13 +62,13 @@ const els = {
   objYDeg: $('objYDeg'),
   setFocusBtn: $('setFocusBtn'),
   deleteObjectBtn: $('deleteObjectBtn'),
-  duplicateObjectBtn: null,
-  saveSceneBtn: null,
-  loadSceneBtn: null,
-  saveNameInput: null,
-  saveDownloadBtn: null,
-  sceneFileInput: null,
-  sceneActionStatus: null,
+  duplicateObjectBtn: $('duplicateObjectBtn'),
+  saveSceneBtn: $('saveSceneBtn'),
+  loadSceneBtn: $('loadSceneBtn'),
+  saveNameInput: $('saveNameInput'),
+  saveDownloadBtn: $('saveDownloadBtn'),
+  sceneFileInput: $('sceneFileInput'),
+  sceneActionStatus: $('sceneActionStatus'),
   focusStatusText: $('focusStatusText'),
   focusDistanceReadout: $('focusDistanceReadout'),
   focusDiopterReadout: $('focusDiopterReadout'),
@@ -217,637 +217,33 @@ function markDirty() {
   dirty = true;
 }
 
-function installStimulusUi() {
-  // The first dropdown is a broad category. A second control appears beneath
-  // it when that category contains multiple stimulus choices.
-  els.newObjectType.innerHTML = `
-    <option value="text">Text</option>
-    <option value="shapes">Shapes</option>
-    <option value="vision">Vision science stimuli</option>
-    <option value="images">Images</option>
-  `;
-
-  const categoryLabel = els.newObjectType.closest('label')?.querySelector('.label-text');
-  if (categoryLabel) categoryLabel.textContent = 'Category';
-
-  const textLabel = els.newObjectText.closest('label');
-  const textLabelText = textLabel?.querySelector('.label-text');
-  if (textLabelText) textLabelText.textContent = 'Text';
-
-  if (!document.getElementById('newShapeType')) {
-    const row = document.createElement('label');
-    row.id = 'newShapeRow';
-    row.innerHTML = `
-      <span class="label-text">Shape</span>
-      <select id="newShapeType">
-        <option value="circle">Circle</option>
-        <option value="triangle">Triangle</option>
-        <option value="square">Square</option>
-      </select>
-    `;
-    textLabel?.insertAdjacentElement('beforebegin', row);
-  }
-
-  if (!document.getElementById('newVisionType')) {
-    const row = document.createElement('label');
-    row.id = 'newVisionRow';
-    row.innerHTML = `
-      <span class="label-text">Stimulus</span>
-      <select id="newVisionType">
-        <option value="gabor">Gabor patch</option>
-        <option value="arrow">Arrow</option>
-        <option value="landolt">Landolt C</option>
-      </select>
-    `;
-    textLabel?.insertAdjacentElement('beforebegin', row);
-  }
-
-  if (!document.getElementById('newImageKey')) {
-    const row = document.createElement('label');
-    row.id = 'newImageRow';
-    row.innerHTML = `
-      <span class="label-text">Image</span>
-      <select id="newImageKey">
-        <option value="apple">Apple</option>
-        <option value="mug">Mug</option>
-        <option value="stapler">Stapler</option>
-        <option value="banana">Banana</option>
-      </select>
-      <small class="helper">PNG assets from /tools/real-depth/images/</small>
-    `;
-    textLabel?.insertAdjacentElement('beforebegin', row);
-  }
-
-  // Orientation applies to every stimulus. 0° is its native orientation:
-  // arrow points right, Landolt C gap points right, and Gabor bars are vertical.
-  if (!document.getElementById('newOrientationDeg')) {
-    const row = document.createElement('label');
-    row.id = 'newOrientationRow';
-    row.innerHTML = `
-      <span class="label-text">Orientation</span>
-      <span class="field-with-unit stacked">
-        <input id="newOrientationDeg" type="number" min="0" max="359.9" step="1" value="0" />
-        <span>deg</span>
-      </span>
-      <small class="helper">0° = native; positive = counterclockwise</small>
-    `;
-    textLabel?.insertAdjacentElement('afterend', row);
-  }
-
-  if (!document.getElementById('newGaborFrequencyCpd')) {
-    const row = document.createElement('label');
-    row.id = 'newGaborFrequencyRow';
-    row.innerHTML = `
-      <span class="label-text">Spatial frequency</span>
-      <span class="field-with-unit stacked">
-        <input id="newGaborFrequencyCpd" type="number" min="0.1" max="10" step="0.1" value="1.5" />
-        <span>cyc/°</span>
-      </span>
-      <small class="helper">Carrier frequency in cycles per degree of visual angle</small>
-    `;
-    const orientationRow = document.getElementById('newOrientationRow');
-    orientationRow?.insertAdjacentElement('afterend', row);
-  }
-
-  els.newShapeRow = $('newShapeRow');
-  els.newShapeType = $('newShapeType');
-  els.newVisionRow = $('newVisionRow');
-  els.newVisionType = $('newVisionType');
-  els.newImageRow = $('newImageRow');
-  els.newImageKey = $('newImageKey');
-  els.newOrientationRow = $('newOrientationRow');
-  els.newOrientationDeg = $('newOrientationDeg');
-  els.newGaborFrequencyRow = $('newGaborFrequencyRow');
-  els.newGaborFrequencyCpd = $('newGaborFrequencyCpd');
-
-  if (!document.getElementById('objOrientationDeg')) {
-    const row = document.createElement('label');
-    row.id = 'objOrientationRow';
-    row.innerHTML = `
-      <span class="label-text">Orientation</span>
-      <span class="field-with-unit stacked">
-        <input id="objOrientationDeg" type="number" min="0" max="359.9" step="1" />
-        <span>deg</span>
-      </span>
-      <small class="helper">0° = native; positive = counterclockwise</small>
-    `;
-    els.objTextRow.insertAdjacentElement('afterend', row);
-  }
-
-  if (!document.getElementById('objGaborFrequencyCpd')) {
-    const row = document.createElement('label');
-    row.id = 'objGaborFrequencyRow';
-    row.innerHTML = `
-      <span class="label-text">Spatial frequency</span>
-      <span class="field-with-unit stacked">
-        <input id="objGaborFrequencyCpd" type="number" min="0.1" max="10" step="0.1" />
-        <span>cyc/°</span>
-      </span>
-      <small class="helper">Carrier frequency in cycles per degree of visual angle</small>
-    `;
-    const orientationRow = document.getElementById('objOrientationRow');
-    orientationRow?.insertAdjacentElement('afterend', row);
-  }
-
-  els.objOrientationRow = $('objOrientationRow');
-  els.objOrientationDeg = $('objOrientationDeg');
-  els.objGaborFrequencyRow = $('objGaborFrequencyRow');
-  els.objGaborFrequencyCpd = $('objGaborFrequencyCpd');
-
-  updateNewObjectControls();
-}
-
-
-function installWorkspaceLayout() {
-  // Keep the pupil-diameter control in the DOM/code for a possible later
-  // release, but hide it for now and force the simulation to use 4.0 mm.
+/**
+ * Bind behavior to the controls already present in index.html.
+ * All panel positioning, disclosure markup, and scene buttons are static,
+ * so the page is laid out correctly before the module is downloaded.
+ */
+function initializeInterface() {
+  // The public simulator uses a fixed 4 mm pupil, preserving the option to
+  // expose the existing control with SHOW_PUPIL_DIAMETER_CONTROL later.
   if (els.pupilMm) {
     els.pupilMm.value = FIXED_PUPIL_DIAMETER_MM.toFixed(1);
-    const pupilControlRow = els.pupilMm.closest('label') || els.pupilMm.parentElement;
-    if (pupilControlRow) {
-      pupilControlRow.hidden = !SHOW_PUPIL_DIAMETER_CONTROL;
-      pupilControlRow.style.display = SHOW_PUPIL_DIAMETER_CONTROL ? '' : 'none';
-    }
+    const pupilRow = els.pupilMm.closest('.pupil-control-row');
+    if (pupilRow) pupilRow.hidden = !SHOW_PUPIL_DIAMETER_CONTROL;
   }
 
-  // Reorganize the existing simulator DOM at startup so the HTML file does
-  // not need to be replaced. The Add object panel remains always visible,
-  // while Optics, Display calibration, and Room Options become compact
-  // disclosure sections beneath it.
-  const controlsPanel = document.querySelector('.controls-panel');
-  const objectPanel = document.querySelector('.object-panel');
-
-  const addSection = els.addObjectBtn?.closest('.panel-section');
-  const opticsSection = els.pupilMm?.closest('.panel-section');
-  const displaySection = els.displayWidthCm?.closest('.panel-section');
-  const roomSection = els.roomWidthM?.closest('.panel-section');
-
-  if (controlsPanel && addSection && opticsSection && displaySection && roomSection) {
-    // Explicitly enforce the requested top-to-bottom order.
-    controlsPanel.append(addSection, opticsSection, displaySection, roomSection);
-
-    makeCollapsiblePanelSection(opticsSection, 'Optics', false);
-    makeCollapsiblePanelSection(displaySection, 'Display calibration', false);
-    makeCollapsiblePanelSection(roomSection, 'Room Options', false);
-  }
-
-  // Put the selected-object editor first in the right toolbar. The Objects
-  // list and Optical readout follow it in their existing relative order.
-  if (objectPanel && els.selectedObjectSection) {
-    objectPanel.prepend(els.selectedObjectSection);
-  }
-
-  installSceneActionBar();
-  installWorkspaceLayoutStyles();
-}
-
-
-function installScenePersistenceUi() {
-  const bar = document.getElementById('sceneActionBar');
-
-  if (bar) {
-    els.sceneActionStatus = $('sceneActionStatus');
-    els.saveSceneBtn = $('saveSceneBtn');
-    els.loadSceneBtn = $('loadSceneBtn');
-    els.saveNameInput = $('saveNameInput');
-    els.saveDownloadBtn = $('saveDownloadBtn');
-    els.sceneFileInput = $('sceneFileInput');
-  }
-
-  // Add Duplicate beside Delete in the Selected object header.
-  if (els.deleteObjectBtn && !document.getElementById('duplicateObjectBtn')) {
-    const deleteButton = els.deleteObjectBtn;
-    const parent = deleteButton.parentElement;
-
-    const duplicateButton = document.createElement('button');
-    duplicateButton.id = 'duplicateObjectBtn';
-    duplicateButton.type = 'button';
-    // Keep Duplicate identical to Delete in height, padding, and typography,
-    // while giving it the same blue/cream color treatment as Set Object as Focus.
-    duplicateButton.className = `${deleteButton.className || 'icon-button'} duplicate-focus-color`.trim();
-    duplicateButton.textContent = 'Duplicate';
-    duplicateButton.title = 'Duplicate the selected object';
-
-    if (parent) {
-      let actionGroup = parent.querySelector('.selected-object-actions');
-      if (!actionGroup) {
-        actionGroup = document.createElement('div');
-        actionGroup.className = 'selected-object-actions';
-        parent.insertBefore(actionGroup, deleteButton);
-        actionGroup.appendChild(deleteButton);
-      }
-      actionGroup.insertBefore(duplicateButton, deleteButton);
-    }
-
-    els.duplicateObjectBtn = duplicateButton;
-  } else {
-    els.duplicateObjectBtn = $('duplicateObjectBtn');
-  }
-}
-
-
-function makeCollapsiblePanelSection(section, title, initiallyExpanded = false) {
-  if (!section || section.dataset.collapsibleInstalled === 'true') return;
-
-  const oldHeading = section.querySelector(':scope > h2');
-  const body = document.createElement('div');
-  body.className = 'collapsible-section-body';
-
-  // Move everything except the old heading into the disclosure body.
-  for (const child of [...section.children]) {
-    if (child !== oldHeading) body.appendChild(child);
-  }
-
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'collapsible-section-toggle';
-  toggle.setAttribute('aria-expanded', initiallyExpanded ? 'true' : 'false');
-
-  const arrow = document.createElement('span');
-  arrow.className = 'collapsible-section-arrow';
-  arrow.setAttribute('aria-hidden', 'true');
-
-  const label = document.createElement('span');
-  label.className = 'collapsible-section-label';
-  label.textContent = title;
-
-  toggle.append(arrow, label);
-
-  const setExpanded = (expanded) => {
-    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    arrow.textContent = expanded ? '▾' : '▸';
-    body.hidden = !expanded;
-  };
-
-  toggle.addEventListener('click', () => {
-    setExpanded(toggle.getAttribute('aria-expanded') !== 'true');
+  document.querySelectorAll('.collapsible-section-toggle').forEach(toggle => {
+    const body = toggle.nextElementSibling;
+    if (!body?.classList.contains('collapsible-section-body')) return;
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+      toggle.setAttribute('aria-expanded', String(expanded));
+      body.hidden = !expanded;
+      toggle.querySelector('.collapsible-section-arrow').textContent = expanded ? '▾' : '▸';
+    });
   });
 
-  if (oldHeading) oldHeading.remove();
-  section.prepend(toggle);
-  section.appendChild(body);
-  section.classList.add('collapsible-panel-section');
-  section.dataset.collapsibleInstalled = 'true';
-  setExpanded(initiallyExpanded);
-}
-
-function installSceneActionBar() {
-  if (document.getElementById('sceneActionBar')) {
-    els.resetSceneBtn = $('resetSceneBtn');
-    els.clearSceneBtn = $('clearSceneBtn');
-    els.saveSceneBtn = $('saveSceneBtn');
-    els.loadSceneBtn = $('loadSceneBtn');
-    els.saveNameInput = $('saveNameInput');
-    els.saveDownloadBtn = $('saveDownloadBtn');
-    els.sceneFileInput = $('sceneFileInput');
-    els.sceneActionStatus = $('sceneActionStatus');
-    return;
-  }
-
-  const viewportCard = document.querySelector('.viewport-card');
-  if (!viewportCard || !els.viewport) return;
-
-  // Create Reset in the scene action bar instead of requiring a header button.
-  // Remove the old <button id="resetSceneBtn"> from index.html to prevent flashing.
-  if (!els.resetSceneBtn) {
-    els.resetSceneBtn = document.createElement('button');
-    els.resetSceneBtn.id = 'resetSceneBtn';
-    els.resetSceneBtn.type = 'button';
-  }
-
-  const bar = document.createElement('div');
-  bar.id = 'sceneActionBar';
-  bar.className = 'scene-action-bar';
-
-  const topRow = document.createElement('div');
-  topRow.className = 'scene-action-row scene-action-row-top';
-
-  const bottomRow = document.createElement('div');
-  bottomRow.className = 'scene-action-row scene-action-row-bottom';
-
-  // Top row: Reset / Clear.
-  els.resetSceneBtn.className = 'button scene-reset-button';
-  els.resetSceneBtn.textContent = 'Reset';
-  els.resetSceneBtn.title = 'Restore the default scene and simulator settings';
-
-  const clearButton = document.createElement('button');
-  clearButton.id = 'clearSceneBtn';
-  clearButton.type = 'button';
-  clearButton.className = 'button scene-clear-button';
-  clearButton.textContent = 'Clear';
-  clearButton.title = 'Remove all objects from the scene';
-
-  topRow.append(els.resetSceneBtn, clearButton);
-
-  // Bottom row: expandable Save control / Load.
-  const saveGroup = document.createElement('div');
-  saveGroup.id = 'saveSceneGroup';
-  saveGroup.className = 'scene-save-group';
-
-  const saveButton = document.createElement('button');
-  saveButton.id = 'saveSceneBtn';
-  saveButton.type = 'button';
-  saveButton.className = 'button scene-save-button';
-  saveButton.textContent = 'Save';
-  saveButton.title = 'Choose a file name and download this scene';
-  saveButton.setAttribute('aria-expanded', 'false');
-
-  const saveNameInput = document.createElement('input');
-  saveNameInput.id = 'saveNameInput';
-  saveNameInput.type = 'text';
-  saveNameInput.className = 'scene-save-name';
-  saveNameInput.placeholder = 'Enter file name';
-  saveNameInput.autocomplete = 'off';
-  saveNameInput.spellcheck = false;
-  saveNameInput.setAttribute('aria-label', 'Scene file name');
-
-  const saveDownloadButton = document.createElement('button');
-  saveDownloadButton.id = 'saveDownloadBtn';
-  saveDownloadButton.type = 'button';
-  saveDownloadButton.className = 'button scene-save-download';
-  saveDownloadButton.textContent = '↓';
-  saveDownloadButton.title = 'Download scene';
-  saveDownloadButton.setAttribute('aria-label', 'Download scene');
-
-  saveGroup.append(saveButton, saveNameInput, saveDownloadButton);
-
-  const loadButton = document.createElement('button');
-  loadButton.id = 'loadSceneBtn';
-  loadButton.type = 'button';
-  loadButton.className = 'button scene-load-button';
-  loadButton.textContent = 'Load';
-  loadButton.title = 'Load a previously saved scene file';
-
-  const fileInput = document.createElement('input');
-  fileInput.id = 'sceneFileInput';
-  fileInput.type = 'file';
-  fileInput.accept = '.json,application/json';
-  fileInput.className = 'scene-file-input';
-  fileInput.setAttribute('aria-label', 'Load saved scene file');
-
-  // Keep status available to assistive technology without adding a third row.
-  const status = document.createElement('span');
-  status.id = 'sceneActionStatus';
-  status.className = 'scene-action-status';
-  status.setAttribute('aria-live', 'polite');
-
-  bottomRow.append(saveGroup, loadButton);
-  bar.append(topRow, bottomRow, fileInput, status);
-
-  els.viewport.insertAdjacentElement('afterend', bar);
-
-  els.clearSceneBtn = clearButton;
-  els.saveSceneBtn = saveButton;
-  els.loadSceneBtn = loadButton;
-  els.saveNameInput = saveNameInput;
-  els.saveDownloadBtn = saveDownloadButton;
-  els.sceneFileInput = fileInput;
-  els.sceneActionStatus = status;
-
-  // The old header action wrapper is no longer needed once Reset moves here.
-  const headerActions = document.querySelector('.header-actions');
-  if (headerActions && headerActions.children.length === 0) headerActions.remove();
-}
-
-
-function installWorkspaceLayoutStyles() {
-  if (document.getElementById('workspaceLayoutStyles')) return;
-
-  const style = document.createElement('style');
-  style.id = 'workspaceLayoutStyles';
-  style.textContent = `
-    .collapsible-panel-section {
-      padding: 0 !important;
-    }
-
-    .collapsible-section-toggle {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 0.55rem;
-      margin: 0;
-      padding: 1rem;
-      border: 0;
-      background: transparent;
-      color: inherit;
-      font: inherit;
-      font-weight: 700;
-      line-height: 1.2;
-      text-align: left;
-      cursor: pointer;
-    }
-
-    .collapsible-section-toggle:hover {
-      background: color-mix(in srgb, currentColor 7%, transparent);
-    }
-
-    .collapsible-section-toggle:focus-visible {
-      outline: 2px solid currentColor;
-      outline-offset: -4px;
-    }
-
-    .collapsible-section-arrow {
-      flex: 0 0 1rem;
-      width: 1rem;
-      font-size: 0.95em;
-      line-height: 1;
-      text-align: center;
-    }
-
-    .collapsible-section-label {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-
-    .collapsible-section-body {
-      padding: 0 1rem 1rem;
-    }
-
-    .collapsible-section-body[hidden] {
-      display: none !important;
-    }
-
-    .scene-action-bar {
-      display: flex;
-      flex-direction: column;
-      padding: 0;
-      border-top: 1px solid var(--border, #d8dde4);
-      background: var(--panel, #ffffff);
-    }
-
-    .scene-action-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 0.7rem;
-      padding: 0.75rem 0.8rem;
-    }
-
-    .scene-action-row-bottom {
-      border-top: 1px solid var(--border, #d8dde4);
-    }
-
-    .scene-action-row .button,
-    .scene-save-group .button {
-      width: 100%;
-      min-width: 0;
-      margin: 0;
-    }
-
-    .scene-reset-button,
-    .scene-clear-button,
-    .scene-save-button,
-    .scene-save-download,
-    .scene-load-button {
-      border: 1px solid var(--navy, var(--accent, #324C63));
-      background: var(--navy, var(--accent, #324C63));
-      color: var(--cream, #F0E8D8);
-    }
-
-    .scene-save-group {
-      display: flex;
-      align-items: stretch;
-      min-width: 0;
-      gap: 0;
-    }
-
-    .scene-save-group .scene-save-button {
-      flex: 1 1 auto;
-      transition:
-        flex-basis 0.2s ease,
-        width 0.2s ease,
-        border-radius 0.2s ease;
-    }
-
-    .scene-save-name,
-    .scene-save-download {
-      display: none;
-    }
-
-    .scene-save-group.expanded {
-      gap: 0.4rem;
-    }
-
-    .scene-save-group.expanded .scene-save-button {
-      display: block;
-      flex: 0 0 76px;
-      width: 76px;
-    }
-
-    .scene-save-group.expanded .scene-save-name {
-      display: block;
-      flex: 1 1 auto;
-      min-width: 0;
-      width: 100%;
-      padding: 0 0.65rem;
-      border: 1px solid var(--border, #d8dde4);
-      border-radius: 4px;
-      background: #ffffff;
-      color: var(--text, #28343D);
-      font: inherit;
-    }
-
-    .scene-save-group.expanded .scene-save-name::placeholder {
-      color: #9aa1a8;
-      opacity: 1;
-    }
-
-    .scene-save-group.expanded .scene-save-name.needs-name {
-      border-color: #9b2c2c;
-      outline: 1px solid #9b2c2c;
-    }
-
-    .scene-save-group.expanded .scene-save-download {
-      display: inline-flex;
-      flex: 0 0 44px;
-      width: 44px;
-      min-width: 44px;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      font-size: 1.25rem;
-      line-height: 1;
-    }
-
-    .scene-file-input {
-      display: none !important;
-    }
-
-    .scene-action-status {
-      position: absolute !important;
-      width: 1px !important;
-      height: 1px !important;
-      padding: 0 !important;
-      margin: -1px !important;
-      overflow: hidden !important;
-      clip: rect(0, 0, 0, 0) !important;
-      white-space: nowrap !important;
-      border: 0 !important;
-    }
-
-    .scene-clear-button:hover,
-    .scene-load-button:hover,
-    .scene-save-button:hover,
-    .scene-save-download:hover,
-    .scene-reset-button:hover {
-      transform: translateY(-1px);
-    }
-
-    .selected-object-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-left: auto;
-    }
-
-    .selected-object-actions .button {
-      width: auto;
-    }
-
-    .duplicate-focus-color {
-      border-color: var(--navy, var(--accent, #324C63)) !important;
-      background: var(--navy, var(--accent, #324C63)) !important;
-      color: var(--cream, #F0E8D8) !important;
-    }
-
-    .duplicate-focus-color:hover {
-      border-color: var(--navy, var(--accent, #324C63)) !important;
-      background: var(--navy, var(--accent, #324C63)) !important;
-      color: var(--cream, #F0E8D8) !important;
-    }
-
-    .scene-clear-button:hover,
-    .scene-load-button:hover,
-    .scene-save-button:hover,
-    .scene-reset-button:hover {
-      transform: translateY(-1px);
-    }
-
-    @media (max-width: 560px) {
-      .scene-action-row {
-        gap: 0.5rem;
-        padding: 0.65rem;
-      }
-
-      .scene-save-group.expanded .scene-save-button {
-        flex-basis: 64px;
-        width: 64px;
-        padding-left: 0.45rem;
-        padding-right: 0.45rem;
-      }
-
-      .scene-save-group.expanded .scene-save-name {
-        padding-left: 0.5rem;
-        padding-right: 0.5rem;
-      }
-
-      .scene-save-group.expanded .scene-save-download {
-        flex-basis: 40px;
-        width: 40px;
-        min-width: 40px;
-      }
-    }
-  `;
-  document.head.appendChild(style);
+  // Existing control logic determines which stimulus-specific rows are shown.
+  updateNewObjectControls();
 }
 
 function normalizedOrientationDeg(value) {
@@ -3303,9 +2699,7 @@ function init() {
   try {
     createScene();
     createPostProcessing();
-    installStimulusUi();
-    installWorkspaceLayout();
-    installScenePersistenceUi();
+    initializeInterface();
     bindEvents();
     buildRoom();
     updateCameraAndCalibration();
