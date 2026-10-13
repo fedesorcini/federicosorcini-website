@@ -493,6 +493,7 @@ function makeCollapsiblePanelSection(section, title, initiallyExpanded = false) 
 
 function installSceneActionBar() {
   if (document.getElementById('sceneActionBar')) {
+    els.resetSceneBtn = $('resetSceneBtn');
     els.clearSceneBtn = $('clearSceneBtn');
     els.saveSceneBtn = $('saveSceneBtn');
     els.loadSceneBtn = $('loadSceneBtn');
@@ -504,7 +505,15 @@ function installSceneActionBar() {
   }
 
   const viewportCard = document.querySelector('.viewport-card');
-  if (!viewportCard || !els.viewport || !els.resetSceneBtn) return;
+  if (!viewportCard || !els.viewport) return;
+
+  // Create Reset in the scene action bar instead of requiring a header button.
+  // Remove the old <button id="resetSceneBtn"> from index.html to prevent flashing.
+  if (!els.resetSceneBtn) {
+    els.resetSceneBtn = document.createElement('button');
+    els.resetSceneBtn.id = 'resetSceneBtn';
+    els.resetSceneBtn.type = 'button';
+  }
 
   const bar = document.createElement('div');
   bar.id = 'sceneActionBar';
