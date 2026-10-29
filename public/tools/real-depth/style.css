@@ -1046,3 +1046,119 @@ input[type="color"]:disabled {
 
 /* Keep initially-hidden controls hidden before JavaScript initializes. */
 [hidden] { display: none !important; }
+
+/* Independent overhead viewport. The original #viewport remains in place,
+   at its original dimensions, and continues rendering underneath. */
+.viewport-stage { position: relative; }
+.overhead-view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 5;
+  background: #f6f8f8;
+}
+.overhead-view[hidden] { display: none !important; }
+#topViewCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  outline-offset: -3px;
+}
+#topViewCanvas.is-panning { cursor: grabbing; }
+.view-switch-button {
+  border: 1px solid #c8d2d9;
+  border-radius: 6px;
+  padding: 0.36rem 0.75rem;
+  background: #f2f5f7;
+  color: var(--bluegray);
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.view-switch-button:hover { background: #e6edef; }
+.view-switch-button[aria-pressed="true"] { background: var(--bluegray); color: #fff; }
+.view-switch-button:focus-visible, .overhead-zoom-controls button:focus-visible {
+  outline: 2px solid var(--selected); outline-offset: 2px;
+}
+.overhead-zoom-controls {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  top: 13px;
+  right: 13px;
+  padding: 4px;
+  border: 1px solid #ccd7dd;
+  background: rgba(255,255,255,.97);
+  border-radius: 7px;
+  box-shadow: 0 2px 8px rgba(35,55,70,.11);
+  font-variant-numeric: tabular-nums;
+}
+.overhead-zoom-controls button {
+  min-width: 31px;
+  height: 30px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--bluegray);
+  background: transparent;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+}
+.overhead-zoom-controls button:hover { background: #e9f0f3; }
+#topZoomLabel { min-width: 48px; text-align: center; font-size: .74rem; color: var(--bluegray); font-weight: 700; }
+.overhead-instructions {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  pointer-events: none;
+  border: 1px solid #d7e0e4;
+  border-radius: 999px;
+  background: rgba(255,255,255,.95);
+  color: #556e7b;
+  padding: 6px 12px;
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+ .overhead-instructions { white-space: normal; width: calc(100% - 30px); }
+ .view-switch-button { padding: .32rem .5rem; }
+}
+
+/* Projection controls, matched to existing PT Serif/bluegray interface */
+.fov-lock-row { margin-top: .2rem; margin-bottom: .7rem; }
+.fov-lock-row small { max-width: 22rem; }
+#ppdReadout { font-size: .79rem; }
+
+/* A separate angular-coordinate diagram; the WebGL room remains untouched. */
+.participant-view-actions { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.angular-view {position:absolute;inset:0;z-index:4;overflow:hidden;background:#f7fafb;}
+.angular-view[hidden] {display:none !important;}
+#angularLayoutCanvas {display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;}
+.angular-view-caption {position:absolute;left:50%;bottom:12px;transform:translateX(-50%);white-space:nowrap;max-width:calc(100% - 22px);background:rgba(255,255,255,.95);border:1px solid #d3dde3;border-radius:18px;color:#506979;font-size:12px;padding:7px 13px;pointer-events:none;text-align:center;}
+@media(max-width:680px){.participant-view-actions{gap:4px}.participant-view-actions button{padding:5px 7px;font-size:12px}}
+
+/* Three fixed, mutually exclusive choices; all remain visible in every view. */
+.participant-view-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+.participant-view-actions .view-switch-button {
+  flex: 0 0 auto;
+  padding: 0.36rem 0.58rem;
+}
+@media (max-width: 700px) {
+  .viewport-toolbar { flex-wrap: wrap; }
+  .participant-view-actions { width: 100%; justify-content: space-between; gap: 4px; }
+  .participant-view-actions .view-switch-button { flex: 1 1 0; padding: 0.4rem 0.15rem; font-size: 0.73rem; }
+}
+
+/* Allow focus status and all three permanent view tabs to wrap without clipping. */
+.viewport-toolbar { flex-wrap: wrap; }

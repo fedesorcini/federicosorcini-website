@@ -19,7 +19,7 @@
      Real Depth Simulator
     </h1>
     <p>
-     Build a simple scene, choose a fixation target, and visualize depth-dependent defocus and binocular disparity.
+     Build a 3D scene, inspect angular stimulus layouts, and visualize depth-dependent defocus and binocular disparity.
     </p>
    </div>
    <div class="header-actions">
@@ -104,7 +104,7 @@
        </option>
       </select>
       <small class="helper">
-       PNG assets from /tools/real-depth/images/
+       PNG image assets in the simulator's images/ folder
       </small>
      </label>
      <label>
@@ -224,35 +224,41 @@
        &rtrif;
       </span>
       <span class="collapsible-section-label">
-       Display calibration
+       Participant visualization
       </span>
      </button>
      <div class="collapsible-section-body" hidden="">
       <p class="helper">
-       For meaningful on-screen visual angles, keep browser zoom at 100% and enter the physical width of the display.
+       Set the portion of the simulated participant's visual field shown here. No physical monitor calibration is needed.
       </p>
+      <label>
+       <span class="label-text">Projection</span>
+       <select id="projectionMode">
+        <option value="perspective" selected>3D room (straight lines, true perspective)</option>
+        <option value="angular">Angular layout (equal degrees / pixel; no room)</option>
+       </select>
+      </label>
       <label class="field-row">
-       <span>
-        Display width
-       </span>
+       <span>Horizontal field of view</span>
        <span class="field-with-unit">
-        <input id="displayWidthCm" max="200" min="10" step="0.1" type="number" value="80.0"/>
-        <span>
-         cm
-        </span>
+        <input id="horizontalFovDeg" type="number" min="20" max="150" step="1" value="70"/>
+        <span>deg</span>
        </span>
       </label>
       <label class="field-row">
-       <span>
-        Viewing distance
-       </span>
+       <span>Vertical field of view</span>
        <span class="field-with-unit">
-        <input id="viewingDistanceCm" max="300" min="20" step="0.5" type="number" value="60.0"/>
-        <span>
-         cm
-        </span>
+        <input id="verticalFovDeg" type="number" min="10" max="125" step="1" value="78"/>
+        <span>deg</span>
        </span>
       </label>
+      <label class="switch-row fov-lock-row">
+       <span><strong>Match viewport aspect ratio</strong>
+        <small>Keep degrees per pixel equal on both axes; turn off to set each FOV independently.</small>
+       </span>
+       <input id="lockFovAspect" type="checkbox" checked>
+      </label>
+      <p class="helper">3D room keeps straight lines and true viewing geometry; its pixel gaps widen toward the periphery, even for equal angular separations. Angular layout shows stimuli alone at equal degrees per pixel, without distorting a room. Neither is calibrated to your physical monitor.</p>
       <div class="readout-grid compact">
        <div>
         <span>
@@ -264,7 +270,7 @@
        </div>
        <div>
         <span>
-         Pixels / degree
+         Image scale
         </span>
         <strong id="ppdReadout">
          &mdash;
@@ -310,7 +316,7 @@
         Depth
        </span>
        <span class="field-with-unit">
-        <input id="roomDepthM" max="30" min="1" step="0.1" type="number" value="16.0"/>
+        <input id="roomDepthM" max="30" min="1" step="0.1" type="number" value="8.0"/>
         <span>
          m
         </span>
@@ -351,11 +357,31 @@
         Focus: &mdash;
        </strong>
       </div>
-      <div class="toolbar-note">
-       Click an object to select it
+      <div class="participant-view-actions" role="group" aria-label="Simulator view">
+       <button class="view-switch-button" id="roomViewBtn" type="button" aria-pressed="true" title="Show the 3D participant perspective">3D room</button>
+       <button class="view-switch-button" id="layoutViewBtn" type="button" aria-pressed="false" title="Show stimuli at uniform angular spacing">Angular layout</button>
+       <button class="view-switch-button" id="toggleViewBtn" type="button" aria-pressed="false" title="Show the zoomable overhead room">Top view</button>
       </div>
      </div>
-     <div aria-label="3D room simulation" class="viewport" id="viewport">
+     <div class="viewport-stage">
+      <div aria-label="3D room simulation" class="viewport" id="viewport">
+      </div>
+      <!-- Separate angular-coordinate diagram: not a projection of the 3D room. -->
+      <div class="angular-view" id="angularViewPanel" hidden>
+       <canvas id="angularLayoutCanvas" aria-label="Angular layout of stimuli: equal degrees per pixel, click a stimulus to select" tabindex="0"></canvas>
+       <div class="angular-view-caption">Angular layout · stimuli only · click to select</div>
+      </div>
+      <!-- Independent Canvas 2D viewer: never changes or resizes #viewport. -->
+      <div class="overhead-view" id="topViewPanel" hidden>
+       <canvas aria-label="Overhead room layout: scroll to zoom, drag to pan, click an object to select" id="topViewCanvas" tabindex="0"></canvas>
+       <div class="overhead-zoom-controls" aria-label="Overhead zoom controls">
+        <button type="button" id="topZoomOut" aria-label="Zoom out">−</button>
+        <span id="topZoomLabel">100%</span>
+        <button type="button" id="topZoomIn" aria-label="Zoom in">+</button>
+        <button type="button" id="topZoomFit" aria-label="Fit entire room">Fit</button>
+       </div>
+       <span class="overhead-instructions">Drag to pan · Scroll to zoom · Click an object to select</span>
+      </div>
      </div>
      <div class="scene-action-bar" id="sceneActionBar">
       <div class="scene-action-row scene-action-row-top">
@@ -635,15 +661,15 @@
       </div>
      </div>
      <p class="helper formula-note">
-      Defocus uses &Delta;D = 1/z
+      Defocus uses &Delta;D = 1/r
       <sub>
        object
       </sub>
-      &minus; 1/z
+      &minus; 1/r
       <sub>
        focus
       </sub>
-      . Approximate blur diameter uses &beta; &asymp; pupil &times; |&Delta;D|. Relative binocular disparity uses IPD &times; &Delta;D for small angles.
+      , where r is the eye-to-object Euclidean distance. Approximate blur diameter uses &beta; &asymp; pupil &times; |&Delta;D|. The stereo disparity display retains the original near-axis approximation based on axial depth (not the accommodation calculation).
      </p>
     </section>
    </aside>
@@ -661,6 +687,9 @@
       }
     }
   </script>
+  <script src="./top-view.js" defer></script>
+  <script src="./angular-layout.js" defer></script>
+  <script src="./view-controls.js" defer></script>
   <script src="./app.js" type="module">
   </script>
  </body>

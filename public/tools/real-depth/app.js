@@ -10,6 +10,59 @@ const positionAngleDeg = (offsetM, distanceM) => radToDeg(Math.atan2(offsetM, Ma
 const offsetFromPositionAngleM = (angleDeg, distanceM) => Math.max(distanceM, 0.0001) * Math.tan(degToRad(angleDeg));
 const formatSigned = (value, digits = 3) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
 
+// Geometry convention: obj.distanceM is AXIAL Z DEPTH, retained for compatibility
+// with saved scenes, camera projection, and the existing Three.js renderer.
+// All user-facing "Distance from viewer" controls and diopters instead use the
+// Euclidean distance from the cyclopean eye (0, eyeHeight, 0) to object CENTER.
+function eyeToObjectDistanceM(obj) {
+  return Math.hypot(obj.xM, obj.yM, obj.distanceM);
+}
+
+// UI uses the existing independent horizontal/vertical screen-position angles,
+// with x = z*tan(horizontal) and y = z*tan(vertical). Keep these angles fixed
+// when the user edits a radial distance, solving for the underlying axial z.
+function axialDepthFromEyeDistanceM(distanceM, xAngleDeg, yAngleDeg) {
+  return distanceM / Math.hypot(1, Math.tan(degToRad(xAngleDeg)), Math.tan(degToRad(yAngleDeg)));
+}
+
+// Exact angular extent of a FRONTOPARALLEL plane centered at horizontal
+// (or vertical) visual angle theta: atan(tan(theta)+halfWidth/z) minus
+// atan(tan(theta)-halfWidth/z). The usual 2*atan(width/(2*z)) only holds
+// when theta is zero. This is crucial for visual-size-locked periphery.
+function frontoparallelExtentDeg(sizeM, axialDepthM, centerAngleDeg) {
+  const slope = Math.tan(degToRad(centerAngleDeg));
+  const half = sizeM / (2 * Math.max(0.0001, axialDepthM));
+  return radToDeg(Math.atan(slope + half) - Math.atan(slope - half));
+}
+function frontoparallelSizeFromExtentM(angleDeg, axialDepthM, centerAngleDeg) {
+  const alpha = degToRad(clamp(angleDeg, 0.01, 90));
+  const t = Math.tan(degToRad(centerAngleDeg));
+  const T = Math.tan(alpha);
+  // Solve atan(t+u)-atan(t-u)=alpha for u=width/(2*z).
+  const u = T * (1 + t*t) / (1 + Math.sqrt(1 + T*T*(1 + t*t)));
+  return 2 * axialDepthM * u;
+}
+
+function maxEyeDistanceAtAnglesM(xAngleDeg, yAngleDeg, room = currentRoom()) {
+  const tx = Math.tan(degToRad(xAngleDeg));
+  const ty = Math.tan(degToRad(yAngleDeg));
+  let maxZ = Math.max(0.16, room.depthM - 0.05);
+  const maxX = room.widthM / 2 - 0.05;
+  if (Math.abs(tx) > 1e-9) maxZ = Math.min(maxZ, maxX / Math.abs(tx));
+  const maxY = ty > 0 ? room.heightM - 0.05 - room.eyeHeightM : room.eyeHeightM - 0.05;
+  if (Math.abs(ty) > 1e-9) maxZ = Math.min(maxZ, Math.max(0.001, maxY) / Math.abs(ty));
+  return maxZ * Math.hypot(1, tx, ty);
+}
+
+function setObjectEyeDistanceM(obj, requestedDistanceM, room = currentRoom()) {
+  const minAxialZ = 0.15;
+  const directionLength = Math.hypot(1, Math.tan(degToRad(obj.positionXDeg)), Math.tan(degToRad(obj.positionYDeg)));
+  const maxEyeDistance = maxEyeDistanceAtAnglesM(obj.positionXDeg, obj.positionYDeg, room);
+  const safeDistance = clamp(requestedDistanceM, minAxialZ * directionLength, Math.max(minAxialZ * directionLength, maxEyeDistance));
+  obj.distanceM = axialDepthFromEyeDistanceM(safeDistance, obj.positionXDeg, obj.positionYDeg);
+}
+
+
 const els = {
   viewport: $('viewport'),
   viewportMessage: $('viewportMessage'),
@@ -18,8 +71,10 @@ const els = {
   blurToggle: $('blurToggle'),
   diplopiaToggle: $('diplopiaToggle'),
   maxBlurPx: $('maxBlurPx'),
-  displayWidthCm: $('displayWidthCm'),
-  viewingDistanceCm: $('viewingDistanceCm'),
+  projectionMode: $('projectionMode'),
+  horizontalFovDeg: $('horizontalFovDeg'),
+  verticalFovDeg: $('verticalFovDeg'),
+  lockFovAspect: $('lockFovAspect'),
   viewportFovReadout: $('viewportFovReadout'),
   ppdReadout: $('ppdReadout'),
   roomWidthM: $('roomWidthM'),
@@ -94,13 +149,15 @@ const DEFAULTS = {
     maxBlurPx: 24,
   },
   display: {
-    widthCm: 80,
-    viewingDistanceCm: 60,
+    projectionMode: 'perspective',
+    horizontalFovDeg: 70,
+    verticalFovDeg: 78,
+    lockFovAspect: true,
   },
   room: {
     widthM: 7.0,
     heightM: 3.0,
-    depthM: 16.0,
+    depthM: 8.0,
     eyeHeightM: 1.6,
     brightness: 1.25,
   }
@@ -114,10 +171,12 @@ let state = {
 };
 
 let calibration = {
-  horizontalFovDeg: 40,
-  verticalFovDeg: 30,
-  pixelsPerDegreeCss: 30,
-  focalPxCss: 1000,
+  projectionMode: 'angular',
+  horizontalFovDeg: 70,
+  verticalFovDeg: 78,
+  pixelsPerDegreeCss: 10,
+  focalPxCss: 600,
+  focalPyCss: 600,
 };
 
 let renderer;
@@ -458,6 +517,7 @@ function createPostProcessing() {
       tColor: { value: null },
       tDepth: { value: null },
       uResolution: { value: new THREE.Vector2(1, 1) },
+      uTanHalfFov: { value: new THREE.Vector2(1, 1) },
       uFocusDistance: { value: 1.0 },
       uPupilM: { value: 0.004 },
       uFocalPx: { value: 1000.0 },
@@ -479,6 +539,7 @@ function createPostProcessing() {
       uniform sampler2D tColor;
       uniform sampler2D tDepth;
       uniform vec2 uResolution;
+      uniform vec2 uTanHalfFov;
       uniform float uFocusDistance;
       uniform float uPupilM;
       uniform float uFocalPx;
@@ -515,8 +576,13 @@ function createPostProcessing() {
 
       void main() {
         vec4 centerColor = texture2D(tColor, vUv);
-        float depthM = decodeLinearDepth(texture2D(tDepth, vUv));
-        float radiusPx = opticalBlurRadiusPx(depthM);
+        float axialDepthM = decodeLinearDepth(texture2D(tDepth, vUv));
+        // Every pixel represents a ray angled away from straight ahead. Convert
+        // its measured Z-depth to true eye-to-surface distance before computing
+        // diopters, so the room follows the same optics model as the objects.
+        vec2 raySlope = (2.0 * vUv - 1.0) * uTanHalfFov;
+        float eyeDistanceM = axialDepthM * length(vec3(raySlope, 1.0));
+        float radiusPx = opticalBlurRadiusPx(eyeDistanceM);
         vec4 outputColor = centerColor;
 
         if (radiusPx >= 0.35) {
@@ -563,6 +629,9 @@ function createPostProcessing() {
       uHalfShiftUv: { value: 0.0 },
       uVisibleScaleX: { value: 1.0 },
       uVisibleOffsetX: { value: 0.0 },
+      uProjectionAngular: { value: 1.0 },
+      uTanHalfFov: { value: new THREE.Vector2(1, 1) },
+      uHalfAngularFov: { value: new THREE.Vector2(0.8, 0.6) },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -578,6 +647,9 @@ function createPostProcessing() {
       uniform float uHalfShiftUv;
       uniform float uVisibleScaleX;
       uniform float uVisibleOffsetX;
+      uniform float uProjectionAngular;
+      uniform vec2 uTanHalfFov;
+      uniform vec2 uHalfAngularFov;
       varying vec2 vUv;
 
       vec3 linearToSRGB(vec3 value) {
@@ -594,7 +666,15 @@ function createPostProcessing() {
         // alignment shift. This lets diplopic content come in naturally from
         // outside the visible frame instead of smearing or being cut off at
         // the render-target edge.
-        float baseX = uVisibleOffsetX + vUv.x * uVisibleScaleX;
+        // First map evenly spaced visual angles back into the corresponding
+        // pixel coordinates of the real perspective-camera image. The same
+        // source scene, blur, stereo depth, and object positions are reused.
+        vec2 sampleUV = vUv;
+        if (uProjectionAngular > 0.5) {
+          vec2 theta = (vUv * 2.0 - 1.0) * uHalfAngularFov;
+          sampleUV = 0.5 + 0.5 * tan(theta) / uTanHalfFov;
+        }
+        float baseX = uVisibleOffsetX + sampleUV.x * uVisibleScaleX;
         float xL = baseX + uHalfShiftUv;
         float xR = baseX - uHalfShiftUv;
 
@@ -603,13 +683,13 @@ function createPostProcessing() {
 
         vec4 outputColor;
         if (validL && validR) {
-          vec4 leftColor = texture2D(tLeft, vec2(xL, vUv.y));
-          vec4 rightColor = texture2D(tRight, vec2(xR, vUv.y));
+          vec4 leftColor = texture2D(tLeft, vec2(xL, sampleUV.y));
+          vec4 rightColor = texture2D(tRight, vec2(xR, sampleUV.y));
           outputColor = 0.5 * (leftColor + rightColor);
         } else if (validL) {
-          outputColor = texture2D(tLeft, vec2(xL, vUv.y));
+          outputColor = texture2D(tLeft, vec2(xL, sampleUV.y));
         } else if (validR) {
-          outputColor = texture2D(tRight, vec2(xR, vUv.y));
+          outputColor = texture2D(tRight, vec2(xR, sampleUV.y));
         } else {
           // Linear-space equivalent of scene background #D3DBE4.
           outputColor = vec4(0.651406, 0.708376, 0.775822, 1.0);
@@ -667,7 +747,7 @@ function resizeRenderTargets(viewportWidth, renderHeight, overscanPx = 0) {
     renderTargets.overscanPx === padPx;
   if (same) return;
 
-  for (const key of ['left', 'right', 'roomColor', 'roomDepth']) {
+  for (const key of ['mono', 'left', 'right', 'roomColor', 'roomDepth']) {
     disposeRenderTarget(renderTargets[key]);
   }
 
@@ -678,6 +758,7 @@ function resizeRenderTargets(viewportWidth, renderHeight, overscanPx = 0) {
     viewportWidth,
     height: renderHeight,
     overscanPx: padPx,
+    mono: makeSceneTarget(targetWidth, renderHeight),
     left: makeSceneTarget(targetWidth, renderHeight),
     right: makeSceneTarget(targetWidth, renderHeight),
     roomColor: makeSceneTarget(targetWidth, renderHeight),
@@ -888,7 +969,7 @@ function objectOpticalBlurRadiusRenderPx(obj) {
 
   if (!optics.blur || !focus) return 0;
 
-  const deltaD = Math.abs((1 / obj.distanceM) - (1 / focus.distanceM));
+  const deltaD = Math.abs((1 / eyeToObjectDistanceM(obj)) - (1 / eyeToObjectDistanceM(focus)));
   if (deltaD < STIMULUS_FOCUS_TOL_D) return 0;
 
   const blurDiameterRad = optics.pupilM * deltaD;
@@ -1098,8 +1179,11 @@ function makeStimulusTextureData(obj) {
   const dpr = renderer?.getPixelRatio?.() || 1;
   const focalPxRender = calibration.focalPxCss * dpr;
 
-  const targetWidthRenderPx = Math.max(1, projectedPixelsForAngle(obj.angleXDeg, focalPxRender));
-  const targetHeightRenderPx = Math.max(1, projectedPixelsForAngle(obj.angleYDeg, focalPxRender));
+  // Render-target pixel footprint of this exact physical frontoparallel plane.
+  // Peripheral stimuli need more source pixels under perspective projection;
+  // the final angular remap will distribute those pixels evenly in degrees.
+  const targetWidthRenderPx = Math.max(1, focalPxRender * obj.widthM / Math.max(obj.distanceM, 0.05));
+  const targetHeightRenderPx = Math.max(1, calibration.focalPyCss * dpr * obj.heightM / Math.max(obj.distanceM, 0.05));
   const largestTarget = Math.max(targetWidthRenderPx, targetHeightRenderPx);
 
   // Use one common texture scale in X and Y so a circular blur remains circular
@@ -1282,12 +1366,15 @@ function applyObjectTransform(obj) {
 }
 
 function syncObjectDimensions(obj) {
+  // Stimulus planes are frontoparallel and rotate in their plane about Z.
+  // Width/height refer to the local unrotated stimulus axes; for rotations,
+  // its final horizontal/vertical retinal bounding box naturally changes.
   if (obj.lockMode === 'visual') {
-    obj.widthM = sizeFromAngleM(obj.angleXDeg, obj.distanceM);
-    obj.heightM = sizeFromAngleM(obj.angleYDeg, obj.distanceM);
+    obj.widthM = frontoparallelSizeFromExtentM(obj.angleXDeg, obj.distanceM, obj.positionXDeg);
+    obj.heightM = frontoparallelSizeFromExtentM(obj.angleYDeg, obj.distanceM, obj.positionYDeg);
   } else {
-    obj.angleXDeg = visualAngleDeg(obj.widthM, obj.distanceM);
-    obj.angleYDeg = visualAngleDeg(obj.heightM, obj.distanceM);
+    obj.angleXDeg = frontoparallelExtentDeg(obj.widthM, obj.distanceM, obj.positionXDeg);
+    obj.angleYDeg = frontoparallelExtentDeg(obj.heightM, obj.distanceM, obj.positionYDeg);
   }
 }
 
@@ -1460,8 +1547,10 @@ function buildSceneSaveData() {
         maxBlurPx: clamp(numberValue(els.maxBlurPx, DEFAULTS.optics.maxBlurPx), 2, 60),
       },
       display: {
-        widthCm: clamp(numberValue(els.displayWidthCm, DEFAULTS.display.widthCm), 10, 200),
-        viewingDistanceCm: clamp(numberValue(els.viewingDistanceCm, DEFAULTS.display.viewingDistanceCm), 20, 300),
+        projectionMode: els.projectionMode.value,
+        horizontalFovDeg: calibration.horizontalFovDeg,
+        verticalFovDeg: calibration.verticalFovDeg,
+        lockFovAspect: !!els.lockFovAspect.checked,
       },
       room: currentRoom(),
     },
@@ -1549,12 +1638,13 @@ function applyLoadedSceneData(data) {
   els.diplopiaToggle.checked = typeof optics.diplopia === 'boolean' ? optics.diplopia : DEFAULTS.optics.diplopia;
   els.maxBlurPx.value = clamp(finiteSceneNumber(optics.maxBlurPx, DEFAULTS.optics.maxBlurPx), 2, 60).toFixed(0);
 
-  els.displayWidthCm.value = clamp(finiteSceneNumber(display.widthCm, DEFAULTS.display.widthCm), 10, 200).toFixed(1);
-  els.viewingDistanceCm.value = clamp(
-    finiteSceneNumber(display.viewingDistanceCm, DEFAULTS.display.viewingDistanceCm),
-    20,
-    300
-  ).toFixed(1);
+  // Old v1 files included physical viewer-monitor calibration, which was
+  // unrelated to the simulated experimental geometry. Ignore those legacy
+  // monitor values but preserve every object's stored depth/angle/size.
+  els.projectionMode.value = display.projectionMode === 'angular' ? 'angular' : DEFAULTS.display.projectionMode;
+  els.horizontalFovDeg.value = clamp(finiteSceneNumber(display.horizontalFovDeg, DEFAULTS.display.horizontalFovDeg), 20, 150).toFixed(1);
+  els.verticalFovDeg.value = clamp(finiteSceneNumber(display.verticalFovDeg, 78), 10, 125).toFixed(1);
+  els.lockFovAspect.checked = typeof display.lockFovAspect === 'boolean' ? display.lockFovAspect : true;
 
   els.roomWidthM.value = clamp(finiteSceneNumber(room.widthM, DEFAULTS.room.widthM), 1.5, 15).toFixed(1);
   els.roomHeightM.value = clamp(finiteSceneNumber(room.heightM, DEFAULTS.room.heightM), 1.8, 8).toFixed(1);
@@ -1564,6 +1654,7 @@ function applyLoadedSceneData(data) {
 
   buildRoom();
   updateCameraAndCalibration();
+  window.realDepthViewControls?.syncProjection();
   clearObjects();
 
   const allowedTypes = new Set(['letter', 'square', 'circle', 'triangle', 'gabor', 'arrow', 'landolt', 'image']);
@@ -1739,8 +1830,10 @@ function resetAll() {
 
   els.maxBlurPx.value = DEFAULTS.optics.maxBlurPx.toFixed(0);
 
-  els.displayWidthCm.value = DEFAULTS.display.widthCm.toFixed(1);
-  els.viewingDistanceCm.value = DEFAULTS.display.viewingDistanceCm.toFixed(1);
+  els.projectionMode.value = DEFAULTS.display.projectionMode;
+  els.horizontalFovDeg.value = DEFAULTS.display.horizontalFovDeg.toFixed(1);
+  els.verticalFovDeg.value = DEFAULTS.display.verticalFovDeg.toFixed(1);
+  els.lockFovAspect.checked = DEFAULTS.display.lockFovAspect;
 
   els.roomWidthM.value = DEFAULTS.room.widthM.toFixed(1);
   els.roomHeightM.value = DEFAULTS.room.heightM.toFixed(1);
@@ -1760,6 +1853,7 @@ function resetAll() {
 
   buildRoom();
   updateCameraAndCalibration();
+  window.realDepthViewControls?.syncProjection();
   loadDefaultScene();
 }
 
@@ -1768,28 +1862,39 @@ function updateCameraAndCalibration() {
   const room = currentRoom();
   const width = Math.max(1, els.viewport.clientWidth);
   const height = Math.max(1, els.viewport.clientHeight);
-  const displayWidthCm = clamp(numberValue(els.displayWidthCm, 53), 10, 200);
-  const viewingDistanceCm = clamp(numberValue(els.viewingDistanceCm, 60), 20, 300);
-  const screenCssWidth = Math.max(1, window.screen?.width || width);
-  const cssPxPerCm = screenCssWidth / displayWidthCm;
-  const viewportWidthCm = width / cssPxPerCm;
-  const viewportHeightCm = height / cssPxPerCm;
+  // The actual WebGL room is ALWAYS rendered with its original rectilinear
+  // perspective camera. The optional angular map is a separate 2D diagram,
+  // never a post-process warp of the 3D scene or its clickable geometry.
+  const projectionMode = 'perspective';
+  const requestedH = clamp(numberValue(els.horizontalFovDeg, DEFAULTS.display.horizontalFovDeg), 20, 150);
+  const lockAspect = els.lockFovAspect.checked;
+  // Preserve an equal number of degrees per pixel along both screen axes by
+  // default. In custom mode the user may independently change either FOV.
+  const requestedV = lockAspect
+    ? clamp(requestedH * height / width, 10, 125)
+    : clamp(numberValue(els.verticalFovDeg, DEFAULTS.display.verticalFovDeg), 10, 125);
+  els.verticalFovDeg.disabled = lockAspect;
+  if (lockAspect) els.verticalFovDeg.value = requestedV.toFixed(2);
 
-  const hFovRad = 2 * Math.atan(viewportWidthCm / (2 * viewingDistanceCm));
-  const vFovRad = 2 * Math.atan(viewportHeightCm / (2 * viewingDistanceCm));
-  const focalPxCss = (width / 2) / Math.tan(hFovRad / 2);
-  const ppdCss = focalPxCss * Math.PI / 180;
-
+  const focalPxCss = (width / 2) / Math.tan(degToRad(requestedH) / 2);
+  const focalPyCss = (height / 2) / Math.tan(degToRad(requestedV) / 2);
+  const pxPerDegX = projectionMode === 'angular' ? width / requestedH : focalPxCss * Math.PI / 180;
+  const pxPerDegY = projectionMode === 'angular' ? height / requestedV : focalPyCss * Math.PI / 180;
   calibration = {
-    horizontalFovDeg: radToDeg(hFovRad),
-    verticalFovDeg: radToDeg(vFovRad),
-    pixelsPerDegreeCss: ppdCss,
+    projectionMode,
+    horizontalFovDeg: requestedH,
+    verticalFovDeg: requestedV,
+    pixelsPerDegreeCss: pxPerDegX,
     focalPxCss,
+    focalPyCss,
   };
 
+  // A normal perspective camera can support separate horizontal and vertical
+  // FOV values by setting its projection aspect from the tangent half angles.
+  const projectionAspect = Math.tan(degToRad(requestedH / 2)) / Math.tan(degToRad(requestedV / 2));
   for (const cam of [camera, leftCamera, rightCamera]) {
-    cam.fov = calibration.verticalFovDeg;
-    cam.aspect = width / height;
+    cam.fov = requestedV;
+    cam.aspect = projectionAspect;
     cam.near = 0.05;
     cam.far = Math.max(50, room.depthM + 5);
     cam.position.set(0, room.eyeHeightM, 0);
@@ -1801,8 +1906,9 @@ function updateCameraAndCalibration() {
   leftCamera.position.x = -ipdM / 2;
   rightCamera.position.x = ipdM / 2;
 
-  els.viewportFovReadout.textContent = `${calibration.horizontalFovDeg.toFixed(1)}° × ${calibration.verticalFovDeg.toFixed(1)}°`;
-  els.ppdReadout.textContent = `${calibration.pixelsPerDegreeCss.toFixed(1)} px/°`;
+  els.viewportFovReadout.textContent = `${requestedH.toFixed(1)}° × ${requestedV.toFixed(1)}°`;
+  const modeLabel = projectionMode === 'angular' ? 'angular' : 'center';
+  els.ppdReadout.textContent = `${pxPerDegX.toFixed(1)} × ${pxPerDegY.toFixed(1)} px/° (${modeLabel})`;
 
   const dpr = renderer.getPixelRatio();
   const renderWidth = Math.max(1, Math.round(width * dpr));
@@ -1810,11 +1916,31 @@ function updateCameraAndCalibration() {
   renderer.setSize(width, height, false);
   resizeRenderTargets(renderWidth, renderHeight, 0);
 
-  // Texture resolution and rendered blur are calibrated in screen pixels, so
-  // regenerate stimulus textures whenever display calibration changes.
   if (state.objects.length) refreshAllStimulusTextures();
-
   markDirty();
+}
+
+// Render already-optically-processed perspective textures through a final
+// projection transform. We never move a 3D stimulus to fake angular spacing.
+function presentEyeComposite(leftTexture, rightTexture, halfShiftUv, scaleX, offsetX) {
+  compositeMaterial.uniforms.tLeft.value = leftTexture;
+  compositeMaterial.uniforms.tRight.value = rightTexture;
+  compositeMaterial.uniforms.uHalfShiftUv.value = halfShiftUv;
+  compositeMaterial.uniforms.uVisibleScaleX.value = scaleX;
+  compositeMaterial.uniforms.uVisibleOffsetX.value = offsetX;
+  compositeMaterial.uniforms.uProjectionAngular.value = calibration.projectionMode === 'angular' ? 1 : 0;
+  compositeMaterial.uniforms.uTanHalfFov.value.set(
+    Math.tan(degToRad(calibration.horizontalFovDeg / 2)),
+    Math.tan(degToRad(calibration.verticalFovDeg / 2))
+  );
+  compositeMaterial.uniforms.uHalfAngularFov.value.set(
+    degToRad(calibration.horizontalFovDeg / 2),
+    degToRad(calibration.verticalFovDeg / 2)
+  );
+  fullScreenQuad.material = compositeMaterial;
+  renderer.setRenderTarget(null);
+  renderer.clear();
+  renderer.render(fullScreenScene, fullScreenCamera);
 }
 
 function renderRoomScratch(cam) {
@@ -1862,7 +1988,9 @@ function renderBlurredRoom(cam, target) {
   roomBlurMaterial.uniforms.tColor.value = renderTargets.roomColor.texture;
   roomBlurMaterial.uniforms.tDepth.value = renderTargets.roomDepth.texture;
   roomBlurMaterial.uniforms.uResolution.value.set(renderTargets.width, renderTargets.height);
-  roomBlurMaterial.uniforms.uFocusDistance.value = focus?.distanceM ?? 1.0;
+  roomBlurMaterial.uniforms.uFocusDistance.value = focus ? eyeToObjectDistanceM(focus) : 1.0;
+  const verticalTanHalfFov = Math.tan(degToRad(cam.fov) / 2);
+  roomBlurMaterial.uniforms.uTanHalfFov.value.set(verticalTanHalfFov * cam.aspect, verticalTanHalfFov);
   roomBlurMaterial.uniforms.uPupilM.value = optics.pupilM;
   roomBlurMaterial.uniforms.uFocalPx.value = calibration.focalPxCss * dpr;
   roomBlurMaterial.uniforms.uMaxBlurPx.value = optics.maxBlurPx * dpr;
@@ -1918,7 +2046,13 @@ function renderFrame() {
     // When diplopia is off, render exactly the visible field rather than the
     // wider stereo buffer used below.
     resizeRenderTargets(viewportRenderWidth, viewportRenderHeight, 0);
-    renderEyeView(camera, null);
+    if (calibration.projectionMode === 'angular') {
+      renderEyeView(camera, renderTargets.mono);
+      presentEyeComposite(renderTargets.mono.texture, renderTargets.mono.texture, 0, 1, 0);
+    } else {
+      // Unmodified traditional perspective path when binocular overlay is off.
+      renderEyeView(camera, null);
+    }
     return;
   }
 
@@ -1933,7 +2067,7 @@ function renderFrame() {
 
   // Keep vertical FOV and pixel scale unchanged while widening only the
   // horizontal field of the offscreen stereo cameras.
-  const stereoAspect = renderTargets.width / renderTargets.height;
+  const stereoAspect = camera.aspect * (renderTargets.width / viewportRenderWidth);
   for (const cam of [leftCamera, rightCamera]) {
     if (Math.abs(cam.aspect - stereoAspect) > 1e-9) {
       cam.aspect = stereoAspect;
@@ -1950,16 +2084,8 @@ function renderFrame() {
   const visibleScaleX = renderTargets.viewportWidth / renderTargets.width;
   const visibleOffsetX = renderTargets.overscanPx / renderTargets.width;
 
-  compositeMaterial.uniforms.tLeft.value = renderTargets.left.texture;
-  compositeMaterial.uniforms.tRight.value = renderTargets.right.texture;
-  compositeMaterial.uniforms.uHalfShiftUv.value = halfShiftUv;
-  compositeMaterial.uniforms.uVisibleScaleX.value = visibleScaleX;
-  compositeMaterial.uniforms.uVisibleOffsetX.value = visibleOffsetX;
-
-  fullScreenQuad.material = compositeMaterial;
-  renderer.setRenderTarget(null);
-  renderer.clear();
-  renderer.render(fullScreenScene, fullScreenCamera);
+  presentEyeComposite(renderTargets.left.texture, renderTargets.right.texture,
+    halfShiftUv, visibleScaleX, visibleOffsetX);
 }
 
 function animate() {
@@ -1976,6 +2102,14 @@ function onViewportPointerDown(event) {
 
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  if (calibration.projectionMode === 'angular') {
+    // The raycaster expects the pre-warp perspective NDC. Undo the angular
+    // display mapping so clicks at the periphery still hit the right object.
+    const xTheta = pointer.x * degToRad(calibration.horizontalFovDeg / 2);
+    const yTheta = pointer.y * degToRad(calibration.verticalFovDeg / 2);
+    pointer.x = Math.tan(xTheta) / Math.tan(degToRad(calibration.horizontalFovDeg / 2));
+    pointer.y = Math.tan(yTheta) / Math.tan(degToRad(calibration.verticalFovDeg / 2));
+  }
 
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(pickMeshes, false);
@@ -2029,7 +2163,7 @@ function refreshObjectList() {
     const meta = document.createElement('span');
     meta.className = 'meta';
     const frequencyMeta = obj.type === 'gabor' ? ` · ${obj.spatialFrequencyCpd.toFixed(2)} cyc/°` : '';
-    meta.textContent = `${obj.distanceM.toFixed(2)} m · ${obj.angleXDeg.toFixed(2)}° × ${obj.angleYDeg.toFixed(2)}° · ori ${obj.orientationDeg.toFixed(1)}°${frequencyMeta}`;
+    meta.textContent = `${eyeToObjectDistanceM(obj).toFixed(2)} m · ${obj.angleXDeg.toFixed(2)}° × ${obj.angleYDeg.toFixed(2)}° · ori ${obj.orientationDeg.toFixed(1)}°${frequencyMeta}`;
     button.appendChild(meta);
     button.addEventListener('click', () => selectObject(obj.id));
     els.objectList.appendChild(button);
@@ -2068,13 +2202,14 @@ function refreshSelectedObjectEditor() {
   els.objHeightCm.value = (obj.heightM * 100).toFixed(2);
   els.objAngleXDeg.value = obj.angleXDeg.toFixed(3);
   els.objAngleYDeg.value = obj.angleYDeg.toFixed(3);
-  els.objDistanceM.value = obj.distanceM.toFixed(3);
+  els.objDistanceM.value = eyeToObjectDistanceM(obj).toFixed(3);
   els.objXDeg.value = obj.positionXDeg.toFixed(3);
   els.objYDeg.value = obj.positionYDeg.toFixed(3);
 
   const room = currentRoom();
   const limits = positionAngleLimits(obj);
-  els.objDistanceM.max = Math.max(0.16, room.depthM - 0.05).toFixed(2);
+  els.objDistanceM.min = (0.15 * Math.hypot(1, Math.tan(degToRad(obj.positionXDeg)), Math.tan(degToRad(obj.positionYDeg)))).toFixed(3);
+  els.objDistanceM.max = maxEyeDistanceAtAnglesM(obj.positionXDeg, obj.positionYDeg, room).toFixed(3);
   els.objXDeg.min = limits.minXDeg.toFixed(3);
   els.objXDeg.max = limits.maxXDeg.toFixed(3);
   els.objYDeg.min = limits.minYDeg.toFixed(3);
@@ -2100,7 +2235,7 @@ function refreshSelectedObjectEditor() {
 
 function refreshFocusStatus() {
   const focus = focusedObject();
-  els.focusStatusText.textContent = focus ? `Focus: ${focus.name} at ${focus.distanceM.toFixed(2)} m` : 'Focus: none';
+  els.focusStatusText.textContent = focus ? `Focus: ${focus.name} at ${eyeToObjectDistanceM(focus).toFixed(2)} m` : 'Focus: none';
 }
 
 function refreshOpticalReadouts() {
@@ -2116,8 +2251,8 @@ function refreshOpticalReadouts() {
     return;
   }
 
-  const focusD = 1 / focus.distanceM;
-  els.focusDistanceReadout.textContent = `${focus.distanceM.toFixed(3)} m`;
+  const focusD = 1 / eyeToObjectDistanceM(focus);
+  els.focusDistanceReadout.textContent = `${eyeToObjectDistanceM(focus).toFixed(3)} m`;
   els.focusDiopterReadout.textContent = `${focusD.toFixed(3)} D`;
 
   if (!selected) {
@@ -2129,12 +2264,19 @@ function refreshOpticalReadouts() {
   }
 
   const optics = currentOptics();
-  const deltaD = (1 / selected.distanceM) - focusD;
+  const deltaD = (1 / eyeToObjectDistanceM(selected)) - focusD;
   const blurDiameterRad = optics.pupilM * Math.abs(deltaD);
   const blurArcmin = radToDeg(blurDiameterRad) * 60;
-  const disparityRad = optics.ipdM * deltaD;
+  // Disparity is a geometric binocular parallax calculation: unlike
+  // accommodation, the existing near-axis stereo approximation uses Z depth.
+  const disparityRad = optics.ipdM * ((1 / selected.distanceM) - (1 / focus.distanceM));
   const disparityDeg = radToDeg(disparityRad);
-  const separationPxCss = calibration.focalPxCss * disparityRad;
+  // The pixel readout describes the currently selected visualization, not
+  // the physical display. Angular view uses uniform degrees/pixel; perspective
+  // retains the existing near-axis focal-length approximation.
+  const separationPxCss = calibration.projectionMode === 'angular'
+    ? calibration.pixelsPerDegreeCss * disparityDeg
+    : calibration.focalPxCss * disparityRad;
 
   els.deltaDiopterReadout.textContent = `${formatSigned(deltaD, 3)} D`;
   els.blurArcminReadout.textContent = `${blurArcmin.toFixed(2)} arcmin`;
@@ -2214,7 +2356,7 @@ function drawDepthSchematic() {
   ctx.fillText('back wall', right, 28);
 
   const focus = focusedObject();
-  const focusD = focus ? 1 / focus.distanceM : null;
+  const focusD = focus ? 1 / eyeToObjectDistanceM(focus) : null;
 
   const sorted = [...state.objects].sort((a, b) => a.distanceM - b.distanceM);
   sorted.forEach((obj, idx) => {
@@ -2243,7 +2385,7 @@ function drawDepthSchematic() {
     ctx.fillText(obj.name.slice(0, 18), x, labelY);
 
     if (focusD !== null) {
-      const deltaD = (1 / obj.distanceM) - focusD;
+      const deltaD = (1 / eyeToObjectDistanceM(obj)) - focusD;
       ctx.fillStyle = muted;
       ctx.font = '10px "PT Serif", Georgia, serif';
       ctx.fillText(`${formatSigned(deltaD, 2)} D`, x, labelY + 12);
@@ -2264,6 +2406,8 @@ function commitSelectedFromEditor(field, { refreshEditor = true } = {}) {
   if (!obj) return;
 
   const room = currentRoom();
+  const oldEyeDistanceM = eyeToObjectDistanceM(obj);
+  const oldAxialDepthM = obj.distanceM;
 
   if (field === 'name') {
     obj.name = safeName(els.objName.value, obj.type === 'letter' ? (obj.text || 'Letter') : 'Object');
@@ -2292,25 +2436,29 @@ function commitSelectedFromEditor(field, { refreshEditor = true } = {}) {
     obj.angleYDeg = clamp(numberValue(els.objAngleYDeg, obj.angleYDeg), 0.01, 90);
     syncObjectDimensions(obj);
   } else if (field === 'distance') {
-    obj.distanceM = clamp(numberValue(els.objDistanceM, obj.distanceM), 0.15, Math.max(0.16, room.depthM - 0.05));
-    // Visual size and angular position both stay fixed as depth changes.
-    syncObjectDimensions(obj);
-    syncObjectPosition(obj);
+    setObjectEyeDistanceM(obj, numberValue(els.objDistanceM, eyeToObjectDistanceM(obj)), room);
+    // Z changes but angular position stays fixed, as before.
   } else if (field === 'positionX') {
+    const previousEyeDistance = eyeToObjectDistanceM(obj);
     obj.positionXDeg = numberValue(els.objXDeg, obj.positionXDeg);
+    setObjectEyeDistanceM(obj, previousEyeDistance, room);
   } else if (field === 'positionY') {
+    const previousEyeDistance = eyeToObjectDistanceM(obj);
     obj.positionYDeg = numberValue(els.objYDeg, obj.positionYDeg);
+    setObjectEyeDistanceM(obj, previousEyeDistance, room);
   }
 
   sanitizeObjectToRoom(obj);
   applyObjectTransform(obj);
+  const eyeDistanceChanged = Math.abs(eyeToObjectDistanceM(obj) - oldEyeDistanceM) > 1e-9;
+  const axialDepthChanged = Math.abs(obj.distanceM - oldAxialDepthM) > 1e-9;
 
   // Distance changes to the fixation target change every object's dioptric
   // error. Other appearance/size/distance edits only require this object's
   // pre-blurred texture to be regenerated.
-  if (field === 'distance' && obj.id === state.focusedId) {
+  if (eyeDistanceChanged && obj.id === state.focusedId) {
     refreshAllStimulusTextures();
-  } else if (!['name', 'positionX', 'positionY', 'orientation'].includes(field)) {
+  } else if (axialDepthChanged || (obj.lockMode === 'visual' && ['positionX', 'positionY'].includes(field)) || !['name', 'positionX', 'positionY', 'orientation'].includes(field)) {
     refreshObjectStimulus(obj);
   }
 
@@ -2343,6 +2491,7 @@ function nudgeSelectedObject(action) {
 
   const before = {
     distanceM: obj.distanceM,
+    eyeDistanceM: eyeToObjectDistanceM(obj),
     positionXDeg: obj.positionXDeg,
     positionYDeg: obj.positionYDeg,
   };
@@ -2356,16 +2505,20 @@ function nudgeSelectedObject(action) {
   } else if (action === 'down') {
     obj.positionYDeg -= KEYBOARD_NUDGE_ANGLE_DEG;
   } else if (action === 'away') {
-    obj.distanceM += KEYBOARD_NUDGE_DEPTH_M;
+    setObjectEyeDistanceM(obj, before.eyeDistanceM + KEYBOARD_NUDGE_DEPTH_M);
   } else if (action === 'closer') {
-    obj.distanceM -= KEYBOARD_NUDGE_DEPTH_M;
+    setObjectEyeDistanceM(obj, before.eyeDistanceM - KEYBOARD_NUDGE_DEPTH_M);
   } else {
     return;
   }
 
+  if (['left', 'right', 'up', 'down'].includes(action)) {
+    setObjectEyeDistanceM(obj, before.eyeDistanceM);
+  }
   sanitizeObjectToRoom(obj);
 
   const distanceChanged = Math.abs(obj.distanceM - before.distanceM) > 1e-9;
+  const eyeDistanceChanged = Math.abs(eyeToObjectDistanceM(obj) - before.eyeDistanceM) > 1e-9;
   const positionChanged =
     Math.abs(obj.positionXDeg - before.positionXDeg) > 1e-9 ||
     Math.abs(obj.positionYDeg - before.positionYDeg) > 1e-9;
@@ -2377,12 +2530,10 @@ function nudgeSelectedObject(action) {
   // Moving in depth changes optical blur. If the fixation object itself moves,
   // every object's defocus changes; otherwise only the moved object needs a new
   // pre-blurred texture. Lateral/vertical movement needs no texture rebuild.
-  if (distanceChanged) {
-    if (obj.id === state.focusedId) {
-      refreshAllStimulusTextures();
-    } else {
-      refreshObjectStimulus(obj);
-    }
+  if (eyeDistanceChanged && obj.id === state.focusedId) {
+    refreshAllStimulusTextures();
+  } else if (distanceChanged || (obj.lockMode === 'visual' && positionChanged)) {
+    refreshObjectStimulus(obj);
   }
 
   refreshUi();
@@ -2552,16 +2703,13 @@ function bindEvents() {
   els.blurToggle.addEventListener('change', opticsChanged);
   els.diplopiaToggle.addEventListener('change', opticsChanged);
 
-  els.displayWidthCm.addEventListener('input', () => {
-    updateCameraAndCalibration();
-    refreshOpticalReadouts();
-    markDirty();
-  });
-  els.viewingDistanceCm.addEventListener('input', () => {
-    updateCameraAndCalibration();
-    refreshOpticalReadouts();
-    markDirty();
-  });
+  for (const el of [els.projectionMode, els.horizontalFovDeg, els.verticalFovDeg, els.lockFovAspect]) {
+    el.addEventListener('change', () => {
+      updateCameraAndCalibration();
+      refreshOpticalReadouts();
+      markDirty();
+    });
+  }
 
   for (const el of [els.roomWidthM, els.roomHeightM, els.roomDepthM, els.eyeHeightM, els.roomBrightness]) {
     el.addEventListener('change', roomSettingsChanged);
@@ -2712,5 +2860,34 @@ function init() {
     showViewportMessage(`Simulator startup error.${detail} Please send this message or a screenshot so it can be fixed.`);
   }
 }
+
+// Read-only scene data and existing stimulus visuals for independent diagrams.
+// This bridge does not mutate cameras, renderer, objects, or optical calculations.
+window.realDepthTopViewBridge = Object.freeze({
+  snapshot() {
+    const {widthM,heightM,depthM,eyeHeightM} = currentRoom();
+    const optics = currentOptics();
+    return {
+      room: {widthM,heightM,depthM,eyeHeightM},
+      optics: {blur:optics.blur,pupilM:optics.pupilM,maxBlurPx:optics.maxBlurPx},
+      selectedId:state.selectedId, focusedId:state.focusedId,
+      objects:state.objects.map(o=>({
+        id:o.id,name:o.name,type:o.type,text:o.text,color:o.color,
+        imageKey:o.imageKey, distanceM:o.distanceM,xM:o.xM,yM:o.yM,
+        widthM:o.widthM,heightM:o.heightM,
+        angleXDeg:o.angleXDeg,angleYDeg:o.angleYDeg,
+        orientationDeg:o.orientationDeg ?? 0,
+        spatialFrequencyCpd:o.spatialFrequencyCpd ?? 1.5,
+        positionXDeg:o.positionXDeg,positionYDeg:o.positionYDeg
+      }))
+    };
+  },
+  selectObject(id) { selectObject(id); },
+  // Same source drawing logic as the original 3D stimulus textures.
+  stimulusCanvas(id,width,height) {
+    const o=objectById(id);
+    return o ? makeSharpStimulusCanvas(o, Math.max(2,Math.ceil(width)),Math.max(2,Math.ceil(height))) : null;
+  },
+});
 
 init();
