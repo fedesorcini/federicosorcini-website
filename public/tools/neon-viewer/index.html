@@ -480,9 +480,66 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearR
  const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
  g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
  g.beginPath();g.ellipse(0,0,54,62,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.8;g.stroke();g.beginPath();g.ellipse(-55,5,8,13,0,0,Math.PI*2);g.ellipse(55,5,8,13,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,12,47,43,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-12,-55);g.lineTo(0,-78);g.lineTo(12,-55);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
- for(const [prefix,x,color] of [['left',-23,'#B67434'],['right',23,'#8666A6']]){
-  const open=Number.isFinite(a[prefix]);g.beginPath();g.ellipse(x,-24,12,open?9:3,0,0,Math.PI*2);g.fillStyle=open?'#fbf5eb':'#b49b8c';g.fill();g.strokeStyle=open?color:'#947c70';g.lineWidth=2;g.stroke();
-  if(open){g.save();g.translate(x,-24);g.rotate(a[prefix]*RAD);g.save();g.shadowColor=color;g.shadowBlur=14;arrow(g,0,-3,0,-150,color,3.2);g.restore();g.beginPath();g.arc(0,-3,5,0,2*Math.PI);g.fillStyle=prefix==='left'?'#725437':'#6d4d86';g.fill();g.beginPath();g.arc(0,-3,2.6,0,2*Math.PI);g.fillStyle='#2c221b';g.fill();g.restore();}
+ // Each eye ray starts at its pupil and ends at the visible binocular intersection,
+ // or at its own viewport edge if the rays are parallel, diverging, or meet off-screen.
+ // This is a 2D schematic intersection, not an estimate of real-world gaze depth.
+ const headRad=Number.isFinite(a.headDraw)?a.headDraw*RAD:0;
+ const cosHead=Math.cos(headRad),sinHead=Math.sin(headRad);
+ const eyes=[['left',-23,'#B67434'],['right',23,'#8666A6']].map(([prefix,x,color])=>{
+   const open=Number.isFinite(a[prefix]);
+   const local={x,y:-27};
+   const origin={x:cx+scale*(local.x*cosHead-local.y*sinHead),y:cy+scale*(local.x*sinHead+local.y*cosHead)};
+   const worldAngle=headRad+(open?a[prefix]*RAD:0);
+   const dir={x:Math.sin(worldAngle),y:-Math.cos(worldAngle)};
+   return {prefix,x,color,open,local,origin,dir};
+ });
+ // Draw eye sockets first and keep pupils above the extended direction lines.
+ for(const eye of eyes){
+   g.beginPath();g.ellipse(eye.x,-24,12,eye.open?9:3,0,0,Math.PI*2);
+   g.fillStyle=eye.open?'#fbf5eb':'#b49b8c';g.fill();
+   g.strokeStyle=eye.open?eye.color:'#947c70';g.lineWidth=2;g.stroke();
+ }
+ const cross=(u,v)=>u.x*v.y-u.y*v.x;
+ const edgePadding=10;
+ function rayToBorder(eye){
+   const {origin:p,dir:d}=eye,times=[];
+   if(d.x>1e-9)times.push((w-edgePadding-p.x)/d.x);
+   if(d.x< -1e-9)times.push((edgePadding-p.x)/d.x);
+   if(d.y>1e-9)times.push((h-edgePadding-p.y)/d.y);
+   if(d.y< -1e-9)times.push((edgePadding-p.y)/d.y);
+   const t=Math.min(...times.filter(v=>Number.isFinite(v)&&v>0));
+   return Number.isFinite(t)?{x:p.x+t*d.x,y:p.y+t*d.y}:p;
+ }
+ let meeting=null;
+ if(eyes.every(eye=>eye.open)){
+   const [L,R]=eyes;
+   const denominator=cross(L.dir,R.dir);
+   if(Math.abs(denominator)>1e-8){
+     const between={x:R.origin.x-L.origin.x,y:R.origin.y-L.origin.y};
+     const t=cross(between,R.dir)/denominator;
+     const u=cross(between,L.dir)/denominator;
+     const p={x:L.origin.x+t*L.dir.x,y:L.origin.y+t*L.dir.y};
+     if(t>0&&u>0&&p.x>=edgePadding&&p.x<=w-edgePadding&&p.y>=edgePadding&&p.y<=h-edgePadding){
+       meeting=p;
+     }
+   }
+ }
+ // Convert screen-coordinate ray endpoints back to rotated head coordinates.
+ for(const eye of eyes){
+   if(!eye.open)continue;
+   const end=meeting||rayToBorder(eye);
+   const dx=(end.x-cx)/scale,dy=(end.y-cy)/scale;
+   const endLocal={x:dx*cosHead+dy*sinHead,y:-dx*sinHead+dy*cosHead};
+   g.save();g.shadowColor=eye.color;g.shadowBlur=8;
+   arrow(g,eye.local.x,eye.local.y,endLocal.x,endLocal.y,eye.color,2.8);
+   g.restore();
+ }
+ for(const eye of eyes){
+   if(!eye.open)continue;
+   g.beginPath();g.arc(eye.local.x,eye.local.y,5,0,2*Math.PI);
+   g.fillStyle=eye.prefix==='left'?'#725437':'#6d4d86';g.fill();
+   g.beginPath();g.arc(eye.local.x,eye.local.y,2.6,0,2*Math.PI);
+   g.fillStyle='#2c221b';g.fill();
  }
  arrow(g,0,-68,0,-123,'#3E709B',3.2);g.restore();
 }
