@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
+<meta name="description" content="Explore Pupil Labs Neon eye and head movement data in a synchronized top-down viewer with local CSV processing, video playback and vergence estimates." />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta property="og:title" content="Neon Eye & Head Viewer" />
+<meta property="og:description" content="A browser-based tool for exploring synchronized eye, head and scene-video recordings." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#0b1018;--panel:#151d29;--panel-dim:#101925;--border:#273648;--text:#edf3f8;--muted:#a4b2c4;--faint:#73879b;--mint:#55e6c2;--blue:#82b5ff;--gold:#ffc17b;--violet:#b3a8ff}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.48 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}button{cursor:pointer;border:0}button:disabled{cursor:not-allowed;opacity:.45}button:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:2px}button:not(:disabled):active{transform:translateY(1px)}
+.shell{max-width:1530px;margin:auto;padding:23px 24px 30px}.header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:19px}.identity{display:flex;align-items:center;gap:13px}.logo{background:linear-gradient(135deg,#25554f,#203446);border:1px solid #428076;border-radius:12px;width:41px;height:41px;display:grid;place-items:center;color:#b2fff0;font-size:25px;font-weight:750}.eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--mint);font-weight:800}.header h1{font-size:24px;line-height:1.15;letter-spacing:-.65px;margin:3px 0 0}.local{font-size:11px;letter-spacing:.5px;color:#b8c8d5;border:1px solid #35465a;border-radius:99px;padding:8px 12px;white-space:nowrap}.local:before{content:'●';color:var(--mint);font-size:8px;margin-right:8px}
+.main{display:grid;grid-template-columns:308px minmax(0,1fr);gap:16px}.side{display:grid;gap:13px;align-content:start}.card,.stage,.readout,.timeline{background:var(--panel);border:1px solid var(--border);border-radius:15px}.card{padding:16px}.section-title{display:flex;gap:9px;align-items:center;margin-bottom:12px;font-size:14px;font-weight:800}.step{font-size:11px;letter-spacing:1px;color:var(--mint);border-radius:7px;background:#22383e;padding:4px 7px;font-weight:800}.desc{font-size:12px;color:var(--muted);margin:0 0 13px}.file-drop{border:1px dashed #54768a;border-radius:11px;background:#102432;display:flex;align-items:center;justify-content:center;position:relative;min-height:62px;gap:8px;font-weight:720;color:#d9eff8}.file-drop:hover{background:#153143}.file-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}.file-info{margin-top:11px;background:#0e1723;border-radius:9px;border:1px solid #26394a;padding:10px;font-size:12px;color:#d5e0ed;overflow-wrap:anywhere}.file-meta{color:var(--faint);font-size:11px;margin-top:3px}.light-link{background:transparent;color:#90e4dc;font-size:12px;text-decoration:underline;padding:8px 0 0}.light-link:hover{color:white}.alert{background:#2b241b;border:1px solid #625239;color:#e9cfa9;font-size:11.5px;border-radius:9px;padding:10px;margin-top:10px;line-height:1.5}.alert[hidden]{display:none}.rowlabel{display:flex;align-items:center;justify-content:space-between;color:#b9c7d5;font-size:12px;margin-bottom:6px;gap:8px}.field{background:#101a28;color:#eef5fa;border:1px solid #43536a;padding:8px 10px;width:110px;border-radius:8px;text-align:right;font-variant-numeric:tabular-nums}.field.small{width:76px}.mode-select{display:block;background:#101a28;color:#eef5fa;border:1px solid #43536a;border-radius:8px;padding:9px 8px;font-size:12px;width:100%;cursor:pointer}.input-range{accent-color:var(--mint);width:100%;cursor:pointer}.times{display:flex;justify-content:space-between;color:#798fa6;font-size:11px;font-variant-numeric:tabular-nums}.primary{width:100%;background:var(--mint);color:#072e2d;font-weight:850;padding:11px 10px;border-radius:9px;margin-top:12px}.primary:hover{background:#a6ffe8}.caption{font-size:11.5px;color:#a9bacb;margin-top:9px;line-height:1.5}.caption.good{color:#8bf5db}.buttons{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:7px;margin:12px 0}.control{background:#29384b;color:#e7f2f9;border:1px solid #43536b;border-radius:9px;padding:10px 6px;font-size:12px;font-weight:750}.control:hover:not(:disabled){background:#344c65}.control.play{background:#264e48;border-color:#458574;color:#9dffe7}.speed-row{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0}.speed{flex:1;background:#0f1825;border:1px solid #34445a;color:#b7c7d9;border-radius:7px;padding:7px 4px;font-size:11px}.speed.active{border-color:#58cdb4;color:#b5ffeb;background:#1b393a}.check{display:flex;align-items:flex-start;gap:8px;margin-top:11px;color:#abbdd0;font-size:12px;cursor:pointer}.check input{accent-color:var(--mint);margin-top:2px}.minor{color:var(--faint);font-size:11px;margin-top:10px}.minor.error{color:#ff9d9e}.maincol{min-width:0;display:grid;gap:13px;align-content:start}.stage{overflow:hidden}.stage-top{display:flex;justify-content:space-between;align-items:flex-start;gap:13px;padding:16px 18px 12px}.stage-title{font-size:16px;letter-spacing:-.2px;font-weight:790}.stage-sub{font-size:11.5px;color:var(--muted);margin-top:2px}.pill{padding:5px 10px;font-size:10px;font-weight:800;letter-spacing:.5px;border-radius:50px;background:#273445;color:#b2c8da;border:1px solid #415169;white-space:nowrap;text-transform:uppercase}.pill.cal{color:#91efd6;background:#1a3938;border-color:#397d6d}.pill.prov{color:#ffdc99;background:#352e24;border-color:#856b3d}.stage-canvas{position:relative;padding:0 13px 8px}.stage-canvas canvas{display:block;height:500px;width:100%;background:#101a28;border-radius:10px}.stage-hint{position:absolute;top:14px;left:29px;padding:10px 12px;background:#121e2dda;border:1px solid #304052;border-radius:9px;pointer-events:none;font-size:11px;color:#98aec4}.stage-hint strong{color:#ebf5fb;letter-spacing:1px;font-size:10px;display:block;margin-bottom:3px}.legend{display:flex;flex-wrap:wrap;gap:15px;padding:8px 20px 15px;font-size:11.5px;color:#adbed0}.legend span{display:flex;align-items:center;gap:7px}.swatch{width:16px;height:4px;border-radius:8px;background:var(--mint)}.swatch.blue{background:var(--blue)}.swatch.gold{background:var(--gold)}.swatch.gray{background:#697f96}.swatch.violet{background:var(--violet)}.metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.readout{padding:13px 14px;min-width:0}.label{font-size:10px;font-weight:800;color:#91a9be;letter-spacing:.8px;text-transform:uppercase}.value{font-weight:800;font-size:23px;letter-spacing:-.7px;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;margin-top:4px}.value.blue{color:var(--blue)}.value.gold{color:var(--gold)}.value.mint{color:var(--mint)}.value.violet{color:var(--violet)}.micro{font-size:10.5px;color:#8196ab;line-height:1.25;margin-top:2px}
+.timeline{padding:15px 17px 14px}.t-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}.t-title{font-size:13px;font-weight:780}.t-desc{font-size:11px;color:#8ea5ba}.chart-box{height:133px;width:100%;position:relative}.chart-box canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}.chart-footer{display:flex;justify-content:space-between;font-size:10px;color:#8099b0;margin-top:3px}.foot{font-size:11.5px;color:#91a4b8;line-height:1.6;margin:16px 4px 0;max-width:1200px}.foot strong{color:#c9d7e3}
+@media(max-width:1080px){.main{grid-template-columns:275px minmax(0,1fr)}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.stage-canvas canvas{height:450px}}@media(max-width:790px){.shell{padding:14px 12px 25px}.main{grid-template-columns:1fr}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.side .card:last-child{grid-column:1/-1}.stage-canvas canvas{height:460px}.local{font-size:9px}}@media(max-width:540px){.header h1{font-size:19px}.side{grid-template-columns:1fr}.side .card:last-child{grid-column:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.readout{padding:11px}.stage-canvas canvas{height:390px}.stage-hint{left:20px;top:10px}.legend{gap:11px}.stage-top{padding:12px}}
+
+/* Video and overhead canvases share a single responsive row on wide displays. */
+.viewer-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;min-width:0;align-items:stretch}
+.viewer-pair .stage,.viewer-pair .video-stage{min-width:0}
+.viewer-pair .stage-canvas canvas{height:440px}
+.viewer-pair .stage-hint{font-size:10px;padding:9px;top:8px;left:18px}
+.viewer-pair .legend{gap:10px;padding:9px 14px 12px;font-size:10px}
+.viewer-pair .stage-top{padding:13px 15px 10px}
+.viewer-pair .stage-title{font-size:14px}
+.video-stage{background:var(--panel);border:1px solid var(--border);border-radius:15px;overflow:hidden;display:flex;flex-direction:column}
+.video-display{position:relative;background:#050b13;margin:0 12px 10px;border:1px solid #28394a;border-radius:10px;overflow:hidden;min-height:200px;height:440px;display:grid;place-items:center}
+.video-display video{width:100%;height:100%;object-fit:contain;background:#040810;display:block}
+.video-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:9px;padding:24px;text-align:center;color:#97aec0;background:#091322;pointer-events:none}
+.video-placeholder strong{color:#e2eff5;font-size:15px}.video-placeholder[hidden]{display:none}
+.video-io{padding:0 14px 12px;margin-top:auto;display:grid;gap:8px}
+.video-import{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.video-file-drop{padding:7px 14px;border-radius:8px;border:1px solid #4a647e;background:#1c3345;color:#d7eefd;font-size:12px;font-weight:700;position:relative;cursor:pointer;overflow:hidden}
+.video-file-drop input{opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.sync-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sync-row .field{width:88px}
+.sync-button{background:#274a46;color:#b3ffea;border:1px solid #48796f;border-radius:8px;padding:9px 10px;font-size:11px;font-weight:780;cursor:pointer}
+.sync-button:disabled{opacity:.4}.video-status{font-size:11px;color:#8fa7be}.video-status.error{color:#ffa8a8}
+.video-clock{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:11px;color:#b3cad8}
+@media(max-width:1260px){.viewer-pair .stage-canvas canvas,.video-display{height:350px}.viewer-pair .stage-hint{display:none}}
+@media(max-width:1080px){.viewer-pair{grid-template-columns:1fr}.viewer-pair .stage-canvas canvas,.video-display{height:420px}}
+@media(max-width:790px){.viewer-pair{grid-template-columns:repeat(2,minmax(0,1fr))}.viewer-pair .stage-canvas canvas,.video-display{height:350px}}
+@media(max-width:630px){.viewer-pair{grid-template-columns:1fr}.viewer-pair .stage-canvas canvas,.video-display{height:330px}}
+
+/* v6: Clean left-side controls, metrics before video, no alert or explanatory panels. */
+.shell{max-width:1620px}
+.main{grid-template-columns:294px minmax(0,1fr)}
+.maincol{gap:12px}
+.card{padding:16px}
+.quick-panel{border-color:#376b69;background:linear-gradient(160deg,#182730,#151d29 55%)}
+.main-actions{display:grid;grid-template-columns:.85fr 1.4fr;gap:8px;margin:4px 0 17px}
+.main-actions .primary{margin:0;width:100%;font-size:12px;line-height:1.25;padding:12px 8px}
+.main-actions .control{font-size:14px;padding:11px 6px}
+.compact-buttons{display:grid;grid-template-columns:1.3fr 1fr;gap:8px;margin-top:12px}
+.compact-buttons .control{padding:8px 6px}
+.baseline-status{margin-top:11px;font-size:11.5px;font-weight:650;color:#80dbc6}
+.ui-error{margin-top:9px;color:#ffa7a7;font-size:11px;line-height:1.4}.ui-error[hidden]{display:none}
+.rate-field{display:flex;align-items:center;gap:7px}.rate-label{margin-top:14px}
+.speed-label{margin-top:15px}
+.settings-card .speed-row{margin-top:6px}
+.settings-card .check{margin-top:10px}
+.metrics{gap:9px}
+.readout{padding:13px 12px}
+.value{font-size:26px}
+.stage-top{padding:14px 16px 10px}
+.stage .stage-title,.video-stage .stage-title{font-size:15px}
+.video-status[hidden]{display:none}
+.video-io{gap:7px}
+.stage-canvas canvas{background:#101a28}
+@media(max-width:1150px){.main{grid-template-columns:275px minmax(0,1fr)}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:790px){.main{grid-template-columns:1fr}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.side .card:last-child{grid-column:1/-1}}
+@media(max-width:520px){.side{grid-template-columns:1fr}.side .card:last-child{grid-column:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.value{font-size:23px}}
+
+/* Four-source import, binocular vergence, and two independently tracked eyes */
+.input-stack{display:grid;gap:8px}.upload-slot{display:block;position:relative;border:1px solid #405a70;background:#102435;border-radius:9px;padding:8px 11px;min-height:56px;cursor:pointer;color:#e5f2fa}.upload-slot:hover{background:#173248;border-color:#72b4b1}.upload-slot span{font-weight:750;font-size:12px;display:block;line-height:1.25}.upload-slot span b{color:var(--mint)}.upload-slot small{display:block;font-size:10.5px;color:#8daac1;margin-top:3px;font-weight:450;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.upload-slot.loaded{border-color:#367b70;background:#142c2b}.upload-slot.loaded small{color:#82e8d0}.upload-slot input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.export{width:100%;margin-top:10px;color:#b8ffe7;background:#22453f;border-color:#356b60}.metrics{grid-template-columns:repeat(7,minmax(0,1fr))}.value.purple{color:#cba3ff}.swatch.purple{background:#cba3ff}.eye-threshold{margin-top:15px}.eye-threshold .field{width:62px}.video-label{color:#90aabc;font-size:11px}.file-info{margin-top:12px}
+@media(max-width:1250px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:540px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.orientation-diff{font-size:11px;color:#9fb2c4;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+.ipd-setting{margin-top:12px}.ipd-setting .field{width:62px}.value.mint{color:var(--mint)}
+@media(min-width:1251px) and (max-width:1420px){.metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* Real Depth Simulator visual system: faithful palette, typography, surfaces.
+   Cosmetic only: all tracking, CSV matching, calibration and playback logic retained. */
+:root {
+  color-scheme:light;
+  --bluegray:#324C63;
+  --beige:#F0E8D8;
+  --white:#FFFFFF;
+  --text:#28343D;
+  --muted:#68747D;
+  --panel-border:rgba(255,255,255,.2);
+  --light-border:#D8D2C6;
+  --focus:#709C82;
+  --selected:#C4823E;
+  --danger:#A74242;
+  --bg:var(--beige);
+  --panel:var(--white);
+  --panel-dim:#F9F6F0;
+  --border:var(--light-border);
+  --faint:#71808A;
+  --mint:var(--focus);
+  --blue:#3E709B;
+  --gold:#B67434;
+  --violet:#8468A2;
+  --purple:#8468A2;
+}
+html,body{background:var(--beige);color:var(--text);font:14px/1.48 "PT Serif",Georgia,serif;min-height:100%}
+button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
+.shell{max-width:none;padding:0 0 26px;background:var(--beige)}
+.header{margin:0;padding:18px 24px 19px;background:var(--bluegray);color:#fff;border-bottom:1px solid rgba(255,255,255,.18);align-items:center}
+.header h1{font-size:27px;letter-spacing:-.15px;line-height:1.2;color:var(--beige);margin:0 0 4px;font-weight:700}
+.header-subtitle{margin:0;color:rgba(255,255,255,.8);font-size:14px}
+.local{font-family:"PT Serif",Georgia,serif;color:var(--beige);border:1px solid rgba(240,232,216,.65);border-radius:7px;font-size:12px;letter-spacing:0;padding:9px 15px}
+.local:before{background:var(--focus);border-radius:100%;content:"";display:inline-block;width:7px;height:7px;margin-right:8px;vertical-align:middle}
+.main{grid-template-columns:294px minmax(0,1fr);gap:16px;padding:16px;align-items:start}
+.side{gap:0;align-content:start;background:var(--bluegray);border-radius:10px;border:1px solid rgba(255,255,255,.16);overflow:hidden}
+.side>.card{border:0;border-radius:0;background:transparent;box-shadow:none;padding:17px 16px 18px;margin:0;border-bottom:1px solid var(--panel-border);color:#fff}
+.side>.card:last-child{border-bottom:0}
+.quick-panel{background:transparent!important}
+.section-title{font-size:17px;color:var(--beige);margin-bottom:14px;font-weight:700;letter-spacing:0}
+.rowlabel{color:rgba(255,255,255,.87);font-size:13px;margin-bottom:7px}
+.rowlabel label{color:inherit}
+.field,.mode-select{background:#fff;color:var(--text);border:1px solid #D4D7DA;border-radius:5px;min-height:35px;padding:7px 9px;font-size:13px}
+.field:disabled{background:#e8eaec;color:#7a838b}
+.mode-select{min-height:40px;width:100%}
+.input-range{accent-color:#F0E8D8}
+.times,.minor,.orientation-diff{color:rgba(255,255,255,.72);font-size:12px}
+.baseline-status{color:#cce6d6;font-size:12px}
+.primary,.main-actions .primary{background:var(--beige);color:var(--bluegray);border:1px solid var(--beige);border-radius:5px;font-weight:700;font-size:13px}
+.primary:hover,.main-actions .primary:hover{background:#fff;border-color:#fff}
+.control{background:transparent;color:var(--beige);border:1px solid rgba(240,232,216,.62);border-radius:5px;font-weight:700;font-size:12px}
+.control:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.control.play{background:var(--beige);color:var(--bluegray);border-color:var(--beige)}
+.control.play:hover:not(:disabled){background:#fff;color:var(--bluegray)}
+.speed{background:transparent;color:var(--beige);border:1px solid rgba(240,232,216,.45);border-radius:5px;font-size:12px}
+.speed.active,.speed:hover{background:var(--beige);border-color:var(--beige);color:var(--bluegray)}
+.check{color:rgba(255,255,255,.86);font-size:13px}
+.check input{accent-color:var(--focus)}
+.upload-slot{border-radius:5px;background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(240,232,216,.4);min-height:62px;padding:9px 11px}
+.upload-slot:hover{background:rgba(255,255,255,.13);border-color:var(--beige)}
+.upload-slot span{font-weight:700;font-size:13px}
+.upload-slot span b{color:#e7dcc6}
+.upload-slot small{color:rgba(255,255,255,.72);font-size:11px}
+.upload-slot.loaded{border-color:#a3ccb2;background:rgba(112,156,130,.25)}
+.upload-slot.loaded small{color:#cde7d8}
+.file-info{background:rgba(0,0,0,.09);border:1px solid rgba(240,232,216,.2);border-radius:5px;color:#fff}
+.file-meta{color:rgba(255,255,255,.72)}
+.export{color:var(--beige);background:transparent;border:1px solid rgba(240,232,216,.65);border-radius:5px}
+.export:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.ui-error{color:#ffdad1}
+.video-stage,.stage,.timeline{background:#fff;border:1px solid var(--light-border);border-radius:10px}
+.maincol{gap:14px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.readout{background:#F9F5ED;border:1px solid var(--light-border);border-radius:7px;padding:12px 14px;min-width:0}
+.label{font-size:11px;letter-spacing:.05em;color:#6b797f;font-weight:700}
+.value{color:var(--bluegray);font-size:29px;font-weight:700;letter-spacing:-.35px;margin-top:5px;line-height:1.28}
+.value.blue{color:var(--blue)}.value.gold{color:var(--gold)}.value.purple,.value.violet{color:var(--violet)}.value.mint{color:#4d8769}
+.micro{color:#73808A;font-size:11px;line-height:1.4;margin-top:3px}
+.stage-top{background:#fff;border-bottom:1px solid var(--light-border);padding:12px 16px!important;align-items:center}
+.stage .stage-title,.video-stage .stage-title{font-size:16px;color:var(--bluegray);font-weight:700;letter-spacing:0}
+.pill{background:#F8F6F1;color:var(--bluegray);border:1px solid var(--light-border);border-radius:5px;font-size:10px;letter-spacing:.02em}
+.pill.cal{color:#456d53;background:#e9f1e9;border-color:#a7c5b1}
+.pill.prov{background:#f7eee0;color:#906c38;border-color:#dac6a4}
+.stage-canvas{padding:0 12px 8px}
+.stage-canvas canvas{background:#fff!important;border-radius:0 0 5px 5px}
+.legend{color:var(--muted);font-size:12px;padding:9px 16px 13px;border-top:1px solid #ECE9E2}
+.legend span{color:var(--muted)}
+.swatch.gray{background:#8496a5}
+.swatch.blue{background:var(--blue)}.swatch.gold{background:var(--gold)}.swatch.purple{background:var(--violet)}
+.video-display{border:1px solid var(--light-border);border-radius:5px;background:#f8f7f4;margin-top:12px}
+.video-display video{background:#f8f7f4}
+.video-placeholder{background:#f8f7f4;color:#73808A}
+.video-placeholder strong{color:var(--bluegray)}
+.video-io{background:#fff;padding:10px 14px 15px;gap:9px;border-top:1px solid var(--light-border)}
+.video-io .check{color:#63727a}
+.video-clock,.video-label,.sync-row label,.video-status{color:var(--muted)!important;font-size:12px}
+.video-io .input-range{accent-color:var(--bluegray)}
+.sync-row .field{border-color:#c6ccd0;background:#fff;color:var(--text)}
+.sync-button{color:var(--beige);background:var(--bluegray);border:1px solid var(--bluegray);border-radius:5px}
+.sync-button:hover:not(:disabled){background:#415f78}
+.video-status.error{color:var(--danger)!important}
+.timeline{padding:15px 17px 13px}
+.t-title{font-size:17px;color:var(--bluegray);font-weight:700}
+.chart-box{border:1px solid #E6E1D8;border-radius:5px;overflow:hidden;background:#fff}
+.chart-footer{color:var(--muted)}
+@media(min-width:1820px){.metrics{grid-template-columns:repeat(7,minmax(0,1fr))}}
+@media(max-width:1380px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1080px){.viewer-pair{grid-template-columns:1fr}.viewer-pair .stage-canvas canvas,.video-display{height:430px}}
+@media(max-width:830px){.main{grid-template-columns:1fr;padding:12px}.side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:0;gap:10px;background:none;overflow:visible}.side>.card{background:var(--bluegray)!important;border-radius:9px;border:1px solid rgba(50,76,99,.2)}.side>.card:last-child{grid-column:1/-1}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:590px){.header{padding:18px 15px;align-items:flex-start;flex-direction:column;gap:10px}.header h1{font-size:24px}.local{padding:7px 10px}.side{grid-template-columns:1fr}.side>.card:last-child{grid-column:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.main{padding:9px}.readout{padding:10px}.value{font-size:24px}}
+
+
+/* v13: compact seven-metric dashboard and distinct playback states. */
+.metrics{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(132px,1fr));
+  gap:7px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:thin;
+  scrollbar-color:#c8c0b3 transparent;
+  padding-bottom:3px;
+}
+.readout{
+  min-width:0;
+  min-height:100px;
+  padding:9px 10px 8px;
+  border-radius:7px;
+}
+.metrics .label{
+  font-size:10px;
+  letter-spacing:.012em;
+  line-height:1.2;
+  min-height:24px;
+}
+.metrics .value{
+  font-size:25px;
+  line-height:1.12;
+  margin-top:1px;
+  letter-spacing:-.3px;
+}
+.metrics .micro{
+  font-size:9px;
+  line-height:1.22;
+  margin-top:3px;
+}
+.main-actions .control.play{
+  background:#36724E;
+  border:1px solid #36724E;
+  color:#fff;
+  transition:background-color .12s ease,border-color .12s ease;
+}
+.main-actions .control.play:hover:not(:disabled){
+  background:#2C6041;
+  border-color:#2C6041;
+  color:#fff;
+}
+.main-actions .control.play.is-paused{
+  background:#A85E44;
+  border-color:#A85E44;
+  color:#fff;
+}
+.main-actions .control.play.is-paused:hover:not(:disabled){
+  background:#87482F;
+  border-color:#87482F;
+  color:#fff;
+}
+
+/* Publication layout — metric groups and navigation */
+.header-links{display:flex;align-items:center;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+.back-to-tools{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 13px;color:var(--beige);font-size:13px;font-weight:700;text-decoration:none;border:1px solid rgba(240,232,216,.6);border-radius:5px;white-space:nowrap}
+.back-to-tools:hover{background:rgba(255,255,255,.12);color:#fff}
+.back-to-tools:focus-visible{outline:2px solid var(--beige);outline-offset:3px}
+.metrics{display:flex;flex-direction:column;gap:9px;padding:0;overflow:visible}
+.metric-row{display:grid;gap:9px;min-width:0;max-width:100%}
+.metric-row-primary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.metric-row-eyes{grid-template-columns:repeat(4,minmax(0,1fr))}
+.metric-row .readout{height:auto;min-height:92px;padding:10px 14px 11px}
+.metric-row .label{min-height:0;font-size:11px;line-height:1.28;letter-spacing:.026em}
+.metric-row .value{font-size:27px;margin-top:3px;line-height:1.2}
+.metric-row .micro{font-size:10.5px;line-height:1.35;margin-top:3px}
+@media(max-width:1020px){
+  .maincol,.metrics{width:100%;min-width:0;max-width:100%}
+  .metric-row{display:flex;width:100%;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#c8c0b3 transparent;padding-bottom:2px}
+  .metric-row .readout{flex:1 0 162px}
+}
+@media(max-width:590px){
+  .header-links{justify-content:flex-start}
+  .metric-row .readout{min-height:85px;padding:9px 11px}
+  .metric-row .value{font-size:24px}
+  .metric-row .label{font-size:10px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="header"><div class="identity"><div><h1>Neon Eye &amp; Head Viewer</h1><p class="header-subtitle">Top-down motion, binocular eye directions, and synchronized scene video.</p></div></div><div class="header-links"><span class="local">PROCESSED LOCALLY</span><a class="back-to-tools" href="/tools/">Back to Tools</a></div></header>
+<div class="main">
+<aside class="side">
+<section class="card quick-panel">
+  <div class="section-title">Playback &amp; baseline</div>
+  <div class="main-actions"><button class="control play" id="play" type="button" disabled>▶ Play</button><button class="primary" id="calibrate" type="button" disabled>Set this frame as baseline</button></div>
+  <div class="rowlabel"><label for="rowNumber">Data row</label><input id="rowNumber" class="field" disabled type="number" value="1" min="1" step="1"/></div>
+  <input id="scrub" class="input-range" disabled type="range" min="0" max="100" value="0" aria-label="Scrub recording"/>
+  <div class="times"><span id="timeNow">0.00 s</span><span id="timeEnd">—</span></div>
+  <div class="compact-buttons"><button class="control" id="toBaseline" type="button" disabled>↶ Go to baseline</button><button class="control" id="step" type="button" disabled>+1 frame</button></div>
+  <div class="baseline-status" id="baselineNote">Baseline not selected</div>
+</section>
+<section class="card import-card">
+  <div class="section-title">Files</div>
+  <div class="input-stack">
+    <label class="upload-slot"><span><b>1.</b> Eye states <small id="eyeFileName">Choose 3d_eye_states.csv</small></span><input id="eyeFile" type="file" accept=".csv,text/csv" aria-label="Upload 3D eye states CSV" /></label>
+    <label class="upload-slot"><span><b>2.</b> IMU <small id="imuFileName">Choose imu.csv</small></span><input id="imuFile" type="file" accept=".csv,text/csv" aria-label="Upload IMU CSV" /></label>
+    <label class="upload-slot"><span><b>3.</b> Fixations <small id="fixFileName">Choose fixations.csv</small></span><input id="fixFile" type="file" accept=".csv,text/csv" aria-label="Upload fixations CSV" /></label>
+    <label class="upload-slot"><span><b>4.</b> Video <small id="videoFileName">Choose video file</small></span><input id="videoFile" type="file" accept="video/*,.mov,.mp4,.webm" aria-label="Upload recording video" /></label>
+  </div>
+  <div class="file-info"><strong id="filename">Select the three CSV files</strong><div class="file-meta" id="fileStats">Video can be loaded before or after the CSVs</div></div>
+  <button class="control export" type="button" id="exportCsv" disabled>↓ Export aligned CSV</button>
+  <div id="uiError" class="ui-error" hidden></div>
+</section>
+<section class="card settings-card">
+  <div class="section-title">Settings</div>
+  <div class="rowlabel"><label for="orientationMode">Head orientation</label></div>
+  <select id="orientationMode" class="mode-select" aria-label="Head orientation source">
+    <option value="quat" selected>Fused IMU orientation (recommended)</option>
+    <option value="gyro">Raw gyroscope integration (comparison)</option>
+  </select>
+  <div id="orientationDiff" class="orientation-diff" aria-live="off">Raw–fused difference: —</div>
+  <div class="rowlabel speed-label">Speed <span id="playSpeedLabel">1×</span></div>
+  <div class="speed-row" id="speeds"><button class="speed" data-speed="0.25">0.25×</button><button class="speed" data-speed="0.5">0.5×</button><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="2">2×</button><button class="speed" data-speed="4">4×</button></div>
+  <label class="check"><input type="checkbox" id="guides" checked/> Angle guides</label>
+  <div class="rowlabel eye-threshold"><label for="eyeThreshold">Minimum open eyelid</label><div><input type="number" id="eyeThreshold" class="field small" min="0" max="12" step="0.2" value="1.0"/> mm</div></div>
+  <div class="rowlabel ipd-setting"><label for="ipdMm">Interpupillary distance</label><div><input type="number" id="ipdMm" class="field small" min="40" max="85" step="1" value="64"/> mm</div></div>
+</section>
+</aside>
+<div class="maincol">
+<section class="metrics" aria-label="Live tracking measurements">
+  <div class="metric-row metric-row-primary" aria-label="Head, fixation and vergence">
+    <div class="readout"><div class="label">Head rotation Δ</div><div class="value blue" id="headValue">—</div><div class="micro" id="headMethodLabel">Fused quaternion</div></div>
+    <div class="readout"><div class="label">Fixation ID</div><div class="value violet" id="fixValue">—</div><div class="micro" id="fixCaption">Event membership</div></div>
+    <div class="readout"><div class="label">Vergence distance</div><div class="value mint" id="vergenceValue">—</div><div class="micro" id="vergenceCaption">Estimated · IPD 64 mm</div></div>
+  </div>
+  <div class="metric-row metric-row-eyes" aria-label="Eye direction and pupil measurements">
+    <div class="readout"><div class="label">Left eye direction</div><div class="value gold" id="eyeValue">—</div><div class="micro">Relative to baseline head</div></div>
+    <div class="readout"><div class="label">Right eye direction</div><div class="value purple" id="rightEyeValue">—</div><div class="micro" id="rightEyeCaption">Relative to baseline head</div></div>
+    <div class="readout"><div class="label">Left pupil</div><div class="value" id="pupilValue">—</div><div class="micro">Diameter · mm</div></div>
+    <div class="readout"><div class="label">Right pupil</div><div class="value" id="rightPupilValue">—</div><div class="micro">Diameter · mm</div></div>
+  </div>
+</section>
+
+<div class="viewer-pair">
+<section class="stage"><div class="stage-top"><div><div class="stage-title">Participant · overhead</div></div><span class="pill prov" id="status">Provisional baseline</span></div><div class="stage-canvas"><canvas id="scene" role="img" aria-label="Top-down head, fixed shoulders, left eye direction, and head heading"></canvas></div><div class="legend"><span><i class="swatch gray"></i> Body (static)</span><span><i class="swatch blue"></i> Head direction</span><span><i class="swatch gold"></i> Left eye direction</span><span><i class="swatch purple"></i> Right eye direction</span></div></section>
+<section class="video-stage">
+  <div class="stage-top"><div><div class="stage-title">Video</div></div><span class="pill" id="videoIndicator">No video</span></div>
+  <div class="video-display"><video id="video" playsinline preload="metadata" aria-label="Uploaded recording video"></video><div id="videoPlaceholder" class="video-placeholder"><span style="font-size:34px">▣</span><strong>No video loaded</strong></div></div>
+  <div class="video-io">
+    <div class="video-import"><span class="video-label">Synchronized video</span><label class="check" style="margin:0"><input type="checkbox" id="videoSound" /> Audio on</label></div>
+    <div class="video-clock"><span>Video <strong id="videoNow">0:00.00</strong></span><span id="videoEnd">—</span></div>
+    <input id="videoScrub" type="range" class="input-range" min="0" max="100" step="0.01" value="0" disabled aria-label="Find a video frame for synchronization" />
+    <div class="sync-row"><label for="videoOffset" style="color:#b9c7d5;font-size:11px">Video offset (s)</label><input id="videoOffset" class="field" type="number" value="0" step="0.05" aria-label="Video offset in seconds" /><button id="matchVideo" class="sync-button" type="button" disabled>Align to selected row</button></div>
+    <div id="videoStatus" class="video-status" hidden></div>
+  </div>
+</section>
+</div>
+<section class="timeline"><div class="t-head"><div class="t-title">Movement over time</div></div><div class="chart-box"><canvas id="overview" aria-label="Head and left or right eye directional timelines. Click to scrub."></canvas></div><div class="chart-footer"><span id="chartStart">0.0 s</span><span id="chartEnd">—</span></div></section>
+</div></div>
+</div>
+<script>
+"use strict";
+const el = id => document.getElementById(id);
+const DEG=180/Math.PI, RAD=Math.PI/180;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmtDeg=a=>Number.isFinite(a)?((a>.05?'+':'')+a.toFixed(1)+'°'):'—';
+const CAMERA_TO_IMU_X=-102*RAD,CR=Math.cos(CAMERA_TO_IMU_X),SR=Math.sin(CAMERA_TO_IMU_X);
+const wrap180=a=>((a+180)%360+360)%360-180;
+function sceneDirectionToImu(x,y,z){return [x,CR*y-SR*z,SR*y+CR*z];}
+// Binocular convergence in the head-local horizontal plane. Eye centers are ±IPD/2.
+// Optical axes are raw eye direction vectors in Neon's scene-camera coordinates.
+// Rotate both into the head/IMU frame (no translation for direction vectors),
+// then intersect their top-down rays: d = IPD / (left_x/left_forward - right_x/right_forward).
+// A common head rotation or baseline offset does not alter this binocular distance.
+function getIpdMeters(){
+ const mm=Number(el('ipdMm').value);
+ return Number.isFinite(mm) && mm>=40 && mm<=85 ? mm/1000 : 0.064;
+}
+function vergenceForRow(row){
+ if(!row || !row.leftValid || !row.rightValid) return {meters:NaN,reason:'Both eyes must be open'};
+ const dirs=[];
+ for(const prefix of ['left','right']){
+  const x=row[prefix+'X'],y=row[prefix+'Y'],z=row[prefix+'Z'];
+  const norm=Math.hypot(x,y,z);
+  if(!(norm>0.2) || !Number.isFinite(norm)) return {meters:NaN,reason:'Eye axis unavailable'};
+  const d=sceneDirectionToImu(x/norm,y/norm,z/norm);
+  if(!Number.isFinite(d[0]) || !(d[1]>0.05)) return {meters:NaN,reason:'Eye axis not forward'};
+  dirs.push(d[0]/d[1]);
+ }
+ const convergence=dirs[0]-dirs[1];
+ if(!(convergence>0)) return {meters:NaN,reason:'Parallel or divergent axes'};
+ const meters=getIpdMeters()/convergence;
+ if(!(meters>0) || !Number.isFinite(meters)) return {meters:NaN,reason:'No finite intersection'};
+ return {meters,reason:meters>100?'Near-parallel · uncertain':'Horizontal optical-axis estimate'};
+}
+function fmtMeters(m){
+ if(!Number.isFinite(m))return '—';
+ if(m>100)return '>100 m';
+ if(m<1)return m.toFixed(2)+' m';
+ if(m<10)return m.toFixed(2)+' m';
+ return m.toFixed(1)+' m';
+}
+
+function quaternionRotate(q,v){const [w,x,y,z]=q,[vx,vy,vz]=v,tx=2*(y*vz-z*vy),ty=2*(z*vx-x*vz),tz=2*(x*vy-y*vx);return [vx+w*tx+y*tz-z*ty,vy+w*ty+z*tx-x*tz,vz+w*tz+x*ty-y*tx];}
+function topDownAzimuth(v){return Math.hypot(v[0],v[1])>1e-5?Math.atan2(v[0],v[1])*DEG:NaN;}
+function quaternionMul(a,b){const [w,x,y,z]=a,[W,X,Y,Z]=b;return [w*W-x*X-y*Y-z*Z,w*X+x*W+y*Z-z*Y,w*Y-x*Z+y*W+z*X,w*Z+x*Y-y*X+z*W];}
+function integrateGyro(q,wx,wy,wz,dt){if(!(dt>0)||![wx,wy,wz].every(Number.isFinite))return q;const norm=Math.hypot(wx,wy,wz);if(norm<1e-9)return q;const a=norm*RAD*dt*.5,k=Math.sin(a)/norm;const out=quaternionMul(q,[Math.cos(a),wx*k,wy*k,wz*k]);const m=Math.hypot(...out);return out.map(v=>v/m);}
+function parseRows(input){const lines=[],r=[],text=input.replace(/^\uFEFF/,'');let row=[],v='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){v+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(v.trim());v='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(v.trim());v='';if(row.some(x=>x!==''))lines.push(row);row=[];}else v+=c;}if(v.length||row.length){row.push(v.trim());if(row.some(x=>x!==''))lines.push(row);}if(lines.length<2)throw Error('CSV has no data rows.');return lines;}
+function parseTable(input,required){const [headers,...data]=parseRows(input),lower=headers.map(h=>h.toLowerCase()),index=n=>lower.indexOf(n.toLowerCase());const missing=required.filter(n=>index(n)<0);if(missing.length)throw Error('Missing columns: '+missing.join(', '));return {headers,index,rows:data.map(values=>({values, ts:readTimestamp(values[index(required[0])])}))};}
+function readTimestamp(s){if(!/^\d{15,21}$/.test(s||''))throw Error('Expected integer nanosecond timestamps. Re-export the source CSV without scientific notation or rounding.');return BigInt(s);}
+const valueAt=(row,index)=>index>=0?row.values[index]:undefined;
+const num=(row,index)=>{const str=valueAt(row,index);return str!==undefined&&str!==''?Number(str):NaN;};
+function normalizedQ(q){const m=Math.hypot(...q);return Number.isFinite(m)&&m>.5&&m<1.5?q.map(v=>v/m):null;}
+function axisValid(row,prefix,threshold){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);const aperture=row[prefix+'Aperture'];return Number.isFinite(mag)&&mag>.2&&mag<2&&(!Number.isFinite(aperture)||aperture>=threshold);}
+function azimuthForEye(q,row,prefix){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);return topDownAzimuth(quaternionRotate(q,sceneDirectionToImu(row[prefix+'X']/mag,row[prefix+'Y']/mag,row[prefix+'Z']/mag)));}
+function unwrapField(rows,src,dst){let prev=NaN,cont=NaN;for(const r of rows){const v=r[src];if(Number.isFinite(v)){cont=Number.isFinite(prev)?cont+wrap180(v-prev):v;prev=v;r[dst]=cont;}else r[dst]=NaN;}}
+const state={rows:[],index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true};
+const tickTime=(a,b)=>Number(a-b)/1e9;
+function validateRecording(tables){const ids=[];for(const k of ['eye','imu','fix']){const t=tables[k],ri=t.index('recording id'),si=t.index('section id');if(ri<0||si<0)continue;const first=t.rows[0];ids.push([k,valueAt(first,ri),valueAt(first,si)]);}if(ids.length>1){for(const other of ids.slice(1)){if(other[1]!==ids[0][1]||other[2]!==ids[0][2])throw Error('The exports are from different recordings or sections. Please upload matching files.');}}}
+function buildMerged(){const table={};for(const kind of ['eye','imu','fix']){table[kind]=parseTable(state.sources[kind].text,kind==='fix'?['start timestamp [ns]','end timestamp [ns]','fixation id']:['timestamp [ns]']);}
+ const e=table.eye,m=table.imu,f=table.fix;for(const key of ['optical axis left x','optical axis left y','optical axis left z','optical axis right x','optical axis right y','optical axis right z']){if(e.index(key)<0)throw Error('Eye file missing '+key);}
+ for(const key of ['gyro x [deg/s]','gyro y [deg/s]','gyro z [deg/s]','quaternion w','quaternion x','quaternion y','quaternion z']){if(m.index(key)<0)throw Error('IMU file missing '+key);}
+ validateRecording(table);
+ e.rows.sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);m.rows.sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);f.rows.sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);
+ for(const r of m.rows){r.gx=num(r,m.index('gyro x [deg/s]'));r.gy=num(r,m.index('gyro y [deg/s]'));r.gz=num(r,m.index('gyro z [deg/s]'));r.q=normalizedQ(['quaternion w','quaternion x','quaternion y','quaternion z'].map(k=>num(r,m.index(k))));}
+ // Integrate at ACTUAL IMU timestamps, rather than treating repeated joined values as new samples.
+ let gyroQ=[1,0,0,0];for(let i=0;i<m.rows.length;i++){const ir=m.rows[i];if(i){const prev=m.rows[i-1],dt=tickTime(ir.ts,prev.ts);gyroQ=integrateGyro(gyroQ,prev.gx,prev.gy,prev.gz,dt);}ir.gyroQ=gyroQ;}
+ const fixEnd=f.index('end timestamp [ns]'),fixId=f.index('fixation id'),threshold=clamp(Number(el('eyeThreshold').value)||0,0,12);
+ const rows=[];let j=-1,k=0,matched=0,fixCount=0,rightOpen=0,leftOpen=0;
+ for(let i=0;i<e.rows.length;i++){
+   const eye=e.rows[i];while(j+1<m.rows.length&&m.rows[j+1].ts<=eye.ts)j++;
+   while(k<f.rows.length&&BigInt(valueAt(f.rows[k],fixEnd))<eye.ts)k++;
+   const match=(k<f.rows.length&&f.rows[k].ts<=eye.ts&&eye.ts<=BigInt(valueAt(f.rows[k],fixEnd)))?f.rows[k]:null;
+   const imu=j>=0?m.rows[j]:null; if(imu)matched++;
+   const row={i,ts:eye.ts,sec:tickTime(eye.ts,e.rows[0].ts),eyeRaw:eye,imuRaw:imu,fixRaw:match,fix:match?valueAt(match,fixId):null,
+      leftX:num(eye,e.index('optical axis left x')),leftY:num(eye,e.index('optical axis left y')),leftZ:num(eye,e.index('optical axis left z')),
+      rightX:num(eye,e.index('optical axis right x')),rightY:num(eye,e.index('optical axis right y')),rightZ:num(eye,e.index('optical axis right z')),
+      leftAperture:num(eye,e.index('eyelid aperture left [mm]')),rightAperture:num(eye,e.index('eyelid aperture right [mm]')),
+      pupil:num(eye,e.index('pupil diameter left [mm]')),rightPupil:num(eye,e.index('pupil diameter right [mm]')),
+      gx:imu?.gx??NaN,gy:imu?.gy??NaN,gz:imu?.gz??NaN,headWorld:NaN,gyroHead:NaN};
+   row.leftValid=axisValid(row,'left',threshold);row.rightValid=axisValid(row,'right',threshold);
+   if(row.leftValid)leftOpen++;if(row.rightValid)rightOpen++;
+   row.validHead=!!imu?.q;row.q=imu?.q||null;
+   if(imu){const dt=tickTime(eye.ts,imu.ts);row.gyroQuat=integrateGyro(imu.gyroQ,imu.gx,imu.gy,imu.gz,dt);row.gyroHead=topDownAzimuth(quaternionRotate(row.gyroQuat,[0,1,0]));}
+   if(row.q)row.headWorld=topDownAzimuth(quaternionRotate(row.q,[0,1,0]));
+   for(const [prefix,valid] of [['left',row.leftValid],['right',row.rightValid]]){
+      row[prefix+'World']=valid&&row.q?azimuthForEye(row.q,row,prefix):NaN;
+      row[prefix+'GyroWorld']=valid&&row.gyroQuat?azimuthForEye(row.gyroQuat,row,prefix):NaN;
+   }
+   if(match)fixCount++;
+   rows.push(row);
+ }
+ if(!rows.some(r=>Number.isFinite(r.gyroHead)))throw Error('There are no valid overlapping eye/IMU samples.');
+ for(const [src,dst] of [['headWorld','headUnwrap'],['gyroHead','gyroHeadUnwrap'],['leftWorld','leftUnwrap'],['rightWorld','rightUnwrap'],['leftGyroWorld','leftGyroUnwrap'],['rightGyroWorld','rightGyroUnwrap']])unwrapField(rows,src,dst);
+ return {rows,tables:table,stats:{matched,fixCount,leftOpen,rightOpen,eye:e.rows.length,imu:m.rows.length,fix:f.rows.length}};
+}
+function angles(i){const r=state.rows[i],b=state.rows[state.baseline];if(!r||!b)return null;const fused=el('orientationMode').value==='quat',hk=fused?'headUnwrap':'gyroHeadUnwrap',head=Number.isFinite(r[hk])&&Number.isFinite(b[hk])?r[hk]-b[hk]:NaN;
+ const out={head,headDraw:head};for(const prefix of ['left','right']){const k=fused?prefix+'Unwrap':prefix+'GyroUnwrap';const v=r[k],h=r[hk];out[prefix]=Number.isFinite(v)&&Number.isFinite(h)?wrap180(v-h):NaN;out[prefix+'World']=Number.isFinite(v)&&Number.isFinite(b[hk])?v-b[hk]:NaN;}return out;
+}
+function rebuild(){if(!['eye','imu','fix'].every(k=>state.sources[k]))return;pause();el('uiError').hidden=true;
+ try{const merged=buildMerged();state.rows=merged.rows;state.tables=merged.tables;state.alignedMeta=merged.stats;state.index=0;state.baseline=state.rows.findIndex(r=>Number.isFinite(r.gyroHead));state.confirmed=false;state.index=state.baseline;
+ const n=merged.stats;el('filename').textContent=n.eye.toLocaleString()+' eye-state samples aligned';el('fileStats').textContent=n.matched.toLocaleString()+'/'+n.eye.toLocaleString()+' matched IMU · '+n.fixCount.toLocaleString()+' fixation-labeled · '+n.rightOpen.toLocaleString()+' right-eye open';
+ el('scrub').max=state.rows.length-1;el('scrub').disabled=false;el('matchVideo').disabled=!state.videoReady;el('rowNumber').max=state.rows.length;el('rowNumber').disabled=false;for(const id of ['play','calibrate','toBaseline','step','exportCsv'])el(id).disabled=false;
+ el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);resizeAll();
+ }catch(err){state.rows=[];state.tables=null;state.alignedMeta=null;el('uiError').hidden=false;el('uiError').textContent='Could not align files: '+err.message;el('filename').textContent='Alignment failed';for(const id of ['play','calibrate','toBaseline','step','exportCsv'])el(id).disabled=true;}
+}
+const video=el('video');
+function clockFmt(t){if(!Number.isFinite(t)||t<0)return '—';return Math.floor(t/60)+':'+(t%60).toFixed(2).padStart(5,'0');}
+function videoOffset(){const v=Number(el('videoOffset').value);return Number.isFinite(v)?v:0;}
+function updateVideoClock(){const t=Number.isFinite(video.currentTime)?video.currentTime:0;el('videoNow').textContent=clockFmt(t);if(state.videoReady)el('videoScrub').value=t;}
+function setVideoStatus(msg,isError=false){const node=el('videoStatus');node.textContent=msg;node.className='video-status'+(isError?' error':'');node.hidden=!msg;}
+function seekVideoForDataTime(t){if(!state.videoReady)return;const wanted=t+videoOffset(),target=clamp(wanted,0,Number.isFinite(video.duration)?video.duration:wanted);if(Math.abs((video.currentTime||0)-target)>.018)video.currentTime=target;updateVideoClock();}
+function pause(){state.playing=false;cancelAnimationFrame(state.raf);state.raf=0;el('play').textContent='▶ Play';el('play').classList.remove('is-paused');video.pause();}
+function findDataIndex(t){let lo=0,hi=state.rows.length-1;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(state.rows[mid].sec<=t)lo=mid;else hi=mid-1;}return lo;}
+function setIndex(i,playback=false){if(!state.rows.length)return;state.index=clamp(Math.floor(Number(i)||0),0,state.rows.length-1);el('rowNumber').value=state.index+1;el('scrub').value=state.index;el('timeNow').textContent=state.rows[state.index].sec.toFixed(2)+' s';if(!playback&&state.playing)pause();if(!playback)seekVideoForDataTime(state.rows[state.index].sec);render();}
+function calibrate(){if(!state.rows.length)return;const r=state.rows[state.index];if(!Number.isFinite(r.gyroHead)&&!Number.isFinite(r.headWorld)){el('uiError').textContent='No valid head orientation in this row.';el('uiError').hidden=false;return;}el('uiError').hidden=true;pause();state.baseline=state.index;state.confirmed=true;el('baselineNote').textContent='✓ Baseline · row '+(state.baseline+1).toLocaleString();render();}
+function maybeStartVideo(target){if(!state.videoReady||!state.playing||target<0||target>=video.duration){if(state.videoReady&&video.duration<=target)video.pause();return;}if(video.paused){video.currentTime=target;video.playbackRate=state.speed;video.play().catch(err=>setVideoStatus('Video playback unavailable: '+err.message,true));}}
+function play(){if(!state.rows.length)return;if(state.playing){pause();return;}if(state.index===state.rows.length-1)setIndex(state.baseline);state.playing=true;el('play').textContent='❚❚ Pause';el('play').classList.add('is-paused');state.epoch=performance.now();state.startS=state.rows[state.index].sec;let t0=state.startS+videoOffset();if(state.videoReady&&t0>=0&&t0<video.duration){seekVideoForDataTime(state.startS);maybeStartVideo(t0);}const tick=now=>{if(!state.playing)return;let dataT=state.startS+(now-state.epoch)/1000*state.speed,target=dataT+videoOffset();if(state.videoReady){maybeStartVideo(target);if(target>=0&&target<video.duration&&!video.paused&&Math.abs(target-video.currentTime)>.10)video.currentTime=clamp(target,0,video.duration);if(target>=video.duration)video.pause();updateVideoClock();}setIndex(findDataIndex(dataT),true);if(state.index===state.rows.length-1){pause();return;}state.raf=requestAnimationFrame(tick);};state.raf=requestAnimationFrame(tick);}
+const scene=el('scene'),g=scene.getContext('2d'),over=el('overview'),og=over.getContext('2d');let sw=0,sh=0,ow=0,oh=0;
+function fit(canvas,ctx){const r=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.round(r.width*d));canvas.height=Math.max(1,Math.round(r.height*d));ctx.setTransform(d,0,0,d,0,0);return [r.width,r.height];}
+function resizeAll(){[sw,sh]=fit(scene,g);[ow,oh]=fit(over,og);render();}
+function stroke(ctx,x1,y1,x2,y2,color,width=1,dash=[]){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);}
+function arrow(ctx,x1,y1,x2,y2,color,width=3){stroke(ctx,x1,y1,x2,y2,color,width);const a=Math.atan2(y2-y1,x2-x1),n=8;ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-n*Math.cos(a-.5),y2-n*Math.sin(a-.5));ctx.lineTo(x2-n*Math.cos(a+.5),y2-n*Math.sin(a+.5));ctx.closePath();ctx.fillStyle=color;ctx.fill();}
+function txt(ctx,t,x,y,size,color,align='center',weight=500){ctx.font=weight+' '+size+'px system-ui';ctx.textBaseline='middle';ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(t,x,y);}
+function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
+ if(el('guides').checked){for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD,L=Math.min(220,w*.39,h*.43);stroke(g,cx,cy,cx+Math.sin(a)*L,cy-Math.cos(a)*L,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(L+11),cy-Math.cos(a)*(L+11),10,'#7C898F');}for(const r of [100,165,225]){g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,Math.PI,Math.PI*2);g.stroke();}}
+ stroke(g,cx,0,cx,cy,'#9DAEA6',1.1,[6,7]);txt(g,'BASELINE HEAD / 0°',cx,18,10,'#324C63','center',800);
+ g.save();g.translate(cx,cy);const scale=Math.min(w/550,h/440,1.12);g.scale(scale,scale);
+ g.beginPath();g.moveTo(-54,47);g.bezierCurveTo(-65,58,-117,59,-133,108);g.lineTo(-124,240);g.quadraticCurveTo(0,270,124,240);g.lineTo(133,108);g.bezierCurveTo(117,59,65,58,54,47);g.closePath();g.fillStyle='#526980';g.fill();g.lineWidth=2;g.strokeStyle='#354F65';g.stroke();g.beginPath();g.roundRect(-23,43,46,49,18);g.fillStyle='#43576A';g.fill();stroke(g,-98,105,-105,187,'#617788',2);stroke(g,98,105,105,187,'#617788',2);txt(g,'TORSO · NOT TRACKED',0,183,10,'#E7EDF0','center',750);
+ const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
+ g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
+ g.beginPath();g.ellipse(0,0,54,62,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.8;g.stroke();g.beginPath();g.ellipse(-55,5,8,13,0,0,Math.PI*2);g.ellipse(55,5,8,13,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,12,47,43,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-12,-55);g.lineTo(0,-78);g.lineTo(12,-55);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
+ for(const [prefix,x,color] of [['left',-23,'#B67434'],['right',23,'#8666A6']]){
+  const open=Number.isFinite(a[prefix]);g.beginPath();g.ellipse(x,-24,12,open?9:3,0,0,Math.PI*2);g.fillStyle=open?'#fbf5eb':'#b49b8c';g.fill();g.strokeStyle=open?color:'#947c70';g.lineWidth=2;g.stroke();
+  if(open){g.save();g.translate(x,-24);g.rotate(a[prefix]*RAD);g.save();g.shadowColor=color;g.shadowBlur=14;arrow(g,0,-3,0,-150,color,3.2);g.restore();g.beginPath();g.arc(0,-3,5,0,2*Math.PI);g.fillStyle=prefix==='left'?'#725437':'#6d4d86';g.fill();g.beginPath();g.arc(0,-3,2.6,0,2*Math.PI);g.fillStyle='#2c221b';g.fill();g.restore();}
+ }
+ arrow(g,0,-68,0,-123,'#3E709B',3.2);g.restore();
+}
+function drawChart(){if(!ow||!oh||!state.rows.length)return;const w=ow,h=oh,padX=8,padY=12,WW=w-2*padX,HH=h-2*padY;og.clearRect(0,0,w,h);og.fillStyle='#ffffff';og.fillRect(0,0,w,h);let lo=Infinity,hi=-Infinity;const stride=Math.max(1,Math.floor(state.rows.length/1400));for(let i=0;i<state.rows.length;i+=stride){const a=angles(i);if(!a)continue;for(const v of [a.head,a.leftWorld,a.rightWorld])if(Number.isFinite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}}lo=Math.min(lo,0);hi=Math.max(hi,0);if(!Number.isFinite(lo)){lo=-30;hi=30;}const expand=Math.max(5,(hi-lo)*.09);lo-=expand;hi+=expand;const X=i=>padX+i/Math.max(1,state.rows.length-1)*WW,Y=v=>padY+(hi-v)/(hi-lo)*HH;for(const frac of [0,.25,.5,.75,1]){const yy=padY+frac*HH;stroke(og,padX,yy,w-padX,yy,'#E4E6E3',.8);txt(og,(hi-frac*(hi-lo)).toFixed(0)+'°',w-9,yy-7,9,'#7D898A','right');}
+ for(const [k,color] of [['head','#3E709B'],['leftWorld','#B67434'],['rightWorld','#8666A6']]){og.beginPath();og.lineWidth=1.8;og.strokeStyle=color;let started=false;for(let i=0;i<state.rows.length;i+=Math.max(1,Math.floor(state.rows.length/Math.max(500,w*2)))){const a=angles(i),v=a?a[k]:NaN;if(!Number.isFinite(v)){started=false;continue;}const x=X(i),y=Y(v);if(!started){og.moveTo(x,y);started=true;}else og.lineTo(x,y);}const last=angles(state.rows.length-1);if(last&&Number.isFinite(last[k]))og.lineTo(X(state.rows.length-1),Y(last[k]));og.stroke();}
+ const b=X(state.baseline),now=X(state.index);stroke(og,b,0,b,h,'#A981B0',1,[4,4]);stroke(og,now,0,now,h,'#324C63',1.4);og.fillStyle='#324C63';og.beginPath();og.arc(now,5,3.2,0,2*Math.PI);og.fill();}
+function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[state.index],a=angles(state.index);el('headValue').textContent=fmtDeg(a.head);el('headMethodLabel').textContent=el('orientationMode').value==='quat'?'Fused quaternion · head-relative baseline':'Raw gyro integration · drift-prone';
+ const b=state.rows[state.baseline];
+ const fusedHead=Number.isFinite(r.headUnwrap)&&Number.isFinite(b.headUnwrap)?r.headUnwrap-b.headUnwrap:NaN;
+ const rawHead=Number.isFinite(r.gyroHeadUnwrap)&&Number.isFinite(b.gyroHeadUnwrap)?r.gyroHeadUnwrap-b.gyroHeadUnwrap:NaN;
+ el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2):'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2):'—';const verg=vergenceForRow(r);el('vergenceValue').textContent=fmtMeters(verg.meters);el('vergenceCaption').textContent=verg.reason;const pill=el('status');pill.textContent=state.confirmed?'Calibrated · row '+(state.baseline+1):'Provisional baseline';pill.className=state.confirmed?'pill cal':'pill prov';drawScene();drawChart();}
+function quoteCSV(value){const str=String(value??'');return /[,"\r\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str;}
+function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+// Upload each source independently, rebuild when all three CSVs are available.
+for(const [kind,inputId,nameId] of [['eye','eyeFile','eyeFileName'],['imu','imuFile','imuFileName'],['fix','fixFile','fixFileName']]){
+ el(inputId).addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{state.sources[kind]={text:await file.text(),name:file.name};el(nameId).textContent=file.name;el(inputId).closest('.upload-slot').classList.add('loaded');rebuild();}catch(err){el('uiError').textContent='Could not read '+file.name+': '+err.message;el('uiError').hidden=false;}});
+}
+el('exportCsv').addEventListener('click',exportAlignedCSV);el('ipdMm').addEventListener('input',render);el('eyeThreshold').addEventListener('change',()=>{if(state.sources.eye&&state.sources.imu&&state.sources.fix)rebuild();});
+el('scrub').addEventListener('input',e=>setIndex(e.target.value));el('rowNumber').addEventListener('change',e=>setIndex(Number(e.target.value)-1));el('calibrate').addEventListener('click',calibrate);el('play').addEventListener('click',play);el('step').addEventListener('click',()=>setIndex(state.index+1));el('toBaseline').addEventListener('click',()=>setIndex(state.baseline));el('orientationMode').addEventListener('change',()=>{pause();render();});
+for(const btn of document.querySelectorAll('[data-speed]'))btn.addEventListener('click',()=>{if(state.playing)pause();state.speed=Number(btn.dataset.speed);video.playbackRate=state.speed;el('playSpeedLabel').textContent=state.speed+'×';document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===btn));});
+el('guides').addEventListener('change',render);
+function pointToIndex(event){const rect=over.getBoundingClientRect();return clamp(Math.round((event.clientX-rect.left-8)/(rect.width-16)*(state.rows.length-1)),0,state.rows.length-1);}let dragging=false;over.addEventListener('pointerdown',e=>{if(!state.rows.length)return;dragging=true;over.setPointerCapture(e.pointerId);setIndex(pointToIndex(e));});over.addEventListener('pointermove',e=>{if(dragging)setIndex(pointToIndex(e));});over.addEventListener('pointerup',()=>dragging=false);over.addEventListener('pointercancel',()=>dragging=false);
+document.addEventListener('keydown',e=>{if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();play();}else if(e.code==='ArrowRight'&&state.rows.length){e.preventDefault();setIndex(state.index+1);}else if(e.code==='ArrowLeft'&&state.rows.length){e.preventDefault();setIndex(state.index-1);}});
+window.addEventListener('resize',resizeAll);
+el('videoFile').addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;pause();state.videoReady=false;if(state.videoURL)URL.revokeObjectURL(state.videoURL);state.videoURL=URL.createObjectURL(file);video.src=state.videoURL;video.muted=!el('videoSound').checked;el('videoFileName').textContent=file.name;el('videoFile').closest('.upload-slot').classList.add('loaded');el('videoIndicator').textContent='Loading video';el('videoPlaceholder').hidden=true;setVideoStatus('Loading '+file.name+' …');video.load();});
+video.addEventListener('loadedmetadata',()=>{state.videoReady=true;const duration=video.duration;el('videoIndicator').textContent='Ready';el('videoScrub').disabled=false;el('videoScrub').max=Number.isFinite(duration)?duration:100000;el('videoEnd').textContent=Number.isFinite(duration)?clockFmt(duration):'Unknown duration';el('matchVideo').disabled=!state.rows.length;seekVideoForDataTime(state.rows[state.index]?.sec||0);setVideoStatus('');resizeAll();});
+video.addEventListener('error',()=>{if(!video.src)return;state.videoReady=false;el('videoIndicator').textContent='Video error';el('videoPlaceholder').hidden=false;setVideoStatus('Browser could not decode this video. Try MP4 (H.264) or WebM.',true);});
+video.addEventListener('timeupdate',updateVideoClock);el('videoScrub').addEventListener('input',e=>{if(!state.videoReady)return;pause();video.currentTime=Number(e.target.value);updateVideoClock();});
+el('matchVideo').addEventListener('click',()=>{if(!state.videoReady||!state.rows.length)return;pause();const offset=video.currentTime-state.rows[state.index].sec;el('videoOffset').value=offset.toFixed(3);state.videoOffset=offset;setVideoStatus('Aligned · video '+clockFmt(video.currentTime)+' · data row '+(state.index+1));});
+el('videoOffset').addEventListener('change',()=>{pause();state.videoOffset=videoOffset();if(state.rows.length)seekVideoForDataTime(state.rows[state.index].sec);setVideoStatus('Offset · '+state.videoOffset.toFixed(3)+' s');});el('videoSound').addEventListener('change',e=>{video.muted=!e.target.checked;});video.addEventListener('click',()=>{if(state.videoReady&&state.rows.length)play();});
+// Trigger initial rendering of empty-stage grid.
+resizeAll();
+
+</script></body></html>
