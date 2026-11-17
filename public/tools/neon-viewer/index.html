@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
-<!-- Version 26: user-defined 3D objects with calibrated gaze-position matching -->
+<!-- Version 27: nine-point CSV import and automatic angular + vergence calibration -->
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
@@ -389,6 +389,19 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 .spatial-cal-result.error{color:#ffddcf;background:rgba(130,44,30,.15)}
 .spatial-cal-result[hidden]{display:none}
 .spatial-live{font-size:11px;border-top:1px solid rgba(240,232,216,.28);margin-top:11px;padding-top:9px;color:#f0e8d8;line-height:1.5}
+
+/* v27: spreadsheet-driven nine-point angle and vergence calibration. */
+.spatial-import{border:1px solid rgba(240,232,216,.35);border-radius:8px;padding:10px;margin:10px 0;display:grid;gap:8px}
+.spatial-import-button{cursor:pointer;position:relative;display:block;background:#719b84;border:1px solid #a3c5b1;color:#132f25;text-align:center;border-radius:6px;padding:10px;font-weight:750;font-size:12px}
+.spatial-import-button input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.spatial-import-help{color:#d8e5da;font-size:11px;line-height:1.4}
+.spatial-import-help a{color:#f0e8d8;text-decoration:underline}
+.spatial-row .spatial-identifiers{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:7px}
+.spatial-identifiers input{width:100%;min-width:0}
+.spatial-actions.triple{grid-template-columns:1fr 1fr;}
+.spatial-actions .wide{grid-column:1/-1;background:#709c82;color:#fff;border-color:#9bc3a9}
+.side,.side>.card,.spatial-cal-card,.spatial-list,.spatial-row,.spatial-identifiers,.spatial-fields,.spatial-row label{min-width:0;max-width:100%}
+.spatial-import-help,.spatial-import-help code{overflow-wrap:anywhere;word-break:break-word}
 </style>
 </head>
 <body>
@@ -441,14 +454,19 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 
 <details class="card spatial-cal-card">
   <summary class="section-title">Nine-point spatial calibration</summary>
-  <p class="cal-intro">Optional: specify nine known target locations using horizontal angle (right +), vertical angle (up +), and depth from the baseline head position. Select each corresponding fixation or frame and capture it.</p>
+  <p class="cal-intro">Calibrate <strong>horizontal direction, vertical direction, and vergence distance</strong> together from nine known targets. You can capture fixations manually or import a CSV containing each target’s location and fixation ID.</p>
+  <div class="spatial-import">
+    <label class="spatial-import-button">↑ Import 9 target locations + fixation IDs (CSV)<input id="spatialCsv" type="file" accept=".csv,text/csv" aria-label="Import nine-point calibration CSV" /></label>
+    <div class="spatial-import-help">Columns: <code>name,horizontal_angle_deg,vertical_angle_deg,distance_m,fixation_id</code>. Each ID must identify a different fixation in the loaded recording.</div>
+    <div class="spatial-import-help"><button id="spatialTemplate" class="control" type="button">↓ Download blank CSV template</button></div>
+  </div>
   <div class="rowlabel"><label for="spatialCaptureMode">Use samples from</label></div>
   <select id="spatialCaptureMode" class="mode-select"><option value="fixation">Selected fixation (whole event)</option><option value="frame">Selected frame ±250 ms</option></select>
   <div class="spatial-list" id="spatialTargets"></div>
-  <div class="spatial-actions"><button id="spatialFit" type="button" disabled>Fit all 9 points</button><button id="spatialReset" class="secondary" type="button">Reset</button></div>
+  <div class="spatial-actions triple"><button id="spatialFit" type="button" disabled>Fit all 9 points</button><button id="spatialReset" class="secondary" type="button">Reset</button><button id="spatialCaptureAll" class="wide" type="button">Capture all fixation IDs + calibrate</button></div>
   <div id="spatialResult" class="spatial-cal-result" hidden aria-live="polite"></div>
   <div id="spatialLive" class="spatial-live">Load a recording to inspect spatial gaze direction.</div>
-  <p class="object-note">Nine targets should span horizontal/vertical angles and at least three depths. Calibration applies to the reconstructed spatial gaze direction and vergence depth, not the raw left/right eye axes or the video gaze marker. Keep the participant at approximately the same head position.</p>
+  <p class="object-note">The nine-point fit automatically replaces the three-point vergence fit while active. Its corrected depth drives the vergence readout and overhead convergence point. Original optical-axis readings and video gaze pixels remain unchanged. Use the same baseline head position throughout calibration; validate on additional targets.</p>
 </details>
 <section class="card objects-card">
   <div class="section-title">Objects in the scene</div>
@@ -748,7 +766,7 @@ function normalizedQ(q){const m=Math.hypot(...q);return Number.isFinite(m)&&m>.5
 function axisValid(row,prefix,threshold){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);const aperture=row[prefix+'Aperture'];return Number.isFinite(mag)&&mag>.2&&mag<2&&(!Number.isFinite(aperture)||aperture>=threshold);}
 function azimuthForEye(q,row,prefix){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);return topDownAzimuth(quaternionRotate(q,sceneDirectionToImu(row[prefix+'X']/mag,row[prefix+'Y']/mag,row[prefix+'Z']/mag)));}
 function unwrapField(rows,src,dst){let prev=NaN,cont=NaN;for(const r of rows){const v=r[src];if(Number.isFinite(v)){cont=Number.isFinite(prev)?cont+wrap180(v-prev):v;prev=v;r[dst]=cont;}else r[dst]=NaN;}}
-const state={worldTiming:null,videoClipStartSec:0,videoFileName:null,syncMode:'unverified',rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null,cameraCalibration:null,objects:[],objectEditIndex:-1,objectMatchIndex:-1,spatialCalibration:{points:Array(9).fill(null),fit:null,previousDepthFit:null}};
+const state={worldTiming:null,videoClipStartSec:0,videoFileName:null,syncMode:'unverified',rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null,cameraCalibration:null,objects:[],objectEditIndex:-1,objectMatchIndex:-1,spatialCalibration:{points:Array(9).fill(null),fit:null,previousDepthFit:null,csvReady:false,csvName:null}};
 const tickTime=(a,b)=>Number(a-b)/1e9;
 // Video is aligned using world_timestamps.csv, not by assuming that the first
 // eye-state sample occurred at the first video frame. For segmented Neon video,
@@ -985,36 +1003,118 @@ function spatialReset(clearFields=false,silent=false){
  if(!silent)spatialStatus('Cleared nine-point calibration.');else el('spatialResult').hidden=true;
  if(state.rows.length&&!silent)render();
 }
+function spatialTargetInputs(i){
+ const hText=el('spatialH'+i).value.trim(),vText=el('spatialV'+i).value.trim(),dText=el('spatialD'+i).value.trim();
+ if(!hText||!vText||!dText)throw Error('Target '+(i+1)+': enter horizontal angle, vertical angle and distance.');
+ const h=Number(hText),v=Number(vText),distance=Number(dText);
+ if(!Number.isFinite(h)||Math.abs(h)>80||!Number.isFinite(v)||Math.abs(v)>65||!(distance>=0.15&&distance<=30))throw Error('Target '+(i+1)+': use |H| ≤80°, |V| ≤65°, and distance 0.15–30 m.');
+ return {h,v,distance,name:(el('spatialName'+i).value.trim()||'Target '+(i+1)),fixId:el('spatialFix'+i).value.trim()};
+}
+function spatialFindIntervalById(fixId){
+ const id=String(fixId||'').trim().replace(/^#/,'');
+ if(!id)throw Error('Missing fixation ID. Enter the number from fixations.csv.');
+ const matching=state.fixations.filter(f=>f.id===id);
+ if(!matching.length)throw Error('Fixation #'+id+' was not found in this recording.');
+ if(matching.length>1)throw Error('Fixation #'+id+' occurs more than once; cannot identify a unique interval.');
+ const group=matching[0];
+ return {start:group.start,end:group.end,key:'fix:'+group.ordinal,label:'Fixation #'+group.id,fixationId:id};
+}
+function spatialBuildPoint(i,interval,known,basis){
+ const gazeH=[],gazeV=[],verg=[];
+ for(let k=interval.start;k<=interval.end;k++){
+  const a=spatialMeasuredAngles(gazeWorldDirectionAt(k),basis),theta=binocularAngleDeg(state.rows[k]);
+  if(a&&Number.isFinite(theta)){gazeH.push(a.h);gazeV.push(a.v);verg.push(theta);}
+ }
+ if(gazeH.length<8)throw Error(known.name+' ('+interval.label+'): only '+gazeH.length+' valid binocular gaze samples; use a longer or cleaner fixation.');
+ const mh=medianOf(gazeH),mv=medianOf(gazeV),mt=medianOf(verg);
+ if(![mh,mv,mt].every(Number.isFinite))throw Error(known.name+': unable to calculate stable medians.');
+ return {...known,measuredH:mh,measuredV:mv,vergence:mt,n:gazeH.length,...interval};
+}
+function spatialRenderCapture(i,p){
+ el('spatialMeta'+i).textContent=p.name+' · '+p.label+' · '+p.n+' valid · raw '+p.measuredH.toFixed(1)+'° / '+p.measuredV.toFixed(1)+'° · verg '+p.vergence.toFixed(2)+'°';
+}
 function spatialCapture(i){
  try{
   if(!state.rows.length)throw Error('Load a recording first.');
   pause();
-  const hText=el('spatialH'+i).value,vText=el('spatialV'+i).value,dText=el('spatialD'+i).value;
-  if(!hText||!vText||!dText)throw Error('Enter all three known coordinates for point '+(i+1)+'.');
-  const h=Number(hText),v=Number(vText),distance=Number(dText);
-  if(!Number.isFinite(h)||Math.abs(h)>80||!Number.isFinite(v)||Math.abs(v)>65||!(distance>=0.15&&distance<=30))throw Error('Use a forward target with |horizontal| ≤80°, |vertical| ≤65°, and depth 0.15–30 m.');
-  const interval=spatialSelectInterval();
-  if(state.spatialCalibration.points.some((p,j)=>j!==i&&p?.key===interval.key))throw Error('This interval has already been assigned to another target.');
+  const known=spatialTargetInputs(i),interval=spatialSelectInterval();
+  if(state.spatialCalibration.points.some((p,j)=>j!==i&&p?.key===interval.key))throw Error('This interval is already assigned to another target.');
   const basis=baselineBasis();if(!basis)throw Error('Cannot determine baseline IMU orientation.');
-  const gazeH=[],gazeV=[],verg=[];
-  // Sample at <=200 Hz to avoid excessive repeated 3D projection work.
-  for(let k=interval.start;k<=interval.end;k++){
-   const a=spatialMeasuredAngles(gazeWorldDirectionAt(k),basis),theta=binocularAngleDeg(state.rows[k]);
-   if(a&&Number.isFinite(theta)){
-    gazeH.push(a.h);gazeV.push(a.v);verg.push(theta);
-   }
-  }
-  if(gazeH.length<8)throw Error('Only '+gazeH.length+' samples had valid binocular eyes and spatial gaze. Choose a longer or cleaner fixation.');
-  const mh=medianOf(gazeH),mv=medianOf(gazeV),mt=medianOf(verg);
-  if(![mh,mv,mt].every(Number.isFinite))throw Error('Unable to calculate stable gaze medians.');
-  spatialClearFit();
-  const p={h,v,distance,measuredH:mh,measuredV:mv,vergence:mt,n:gazeH.length,...interval};
-  state.spatialCalibration.points[i]=p;
-  el('spatialMeta'+i).textContent=interval.label+' · '+p.n+' valid · raw '+mh.toFixed(1)+'° / '+mv.toFixed(1)+'° · verg '+mt.toFixed(2)+'°';
-  el('spatialFit').disabled=state.spatialCalibration.points.some(p=>!p);
-  spatialStatus('Captured '+(i+1)+'/9: '+interval.label+'. '+state.spatialCalibration.points.filter(Boolean).length+' of 9 calibration targets assigned.');
-  render();
+  const p=spatialBuildPoint(i,interval,known,basis);
+  spatialClearFit();state.spatialCalibration.points[i]=p;
+  if(interval.fixationId)el('spatialFix'+i).value=interval.fixationId;
+  spatialRenderCapture(i,p);
+  const complete=state.spatialCalibration.points.every(Boolean);
+  el('spatialFit').disabled=!complete;
+  if(complete){spatialFitAll();}else{spatialStatus('Captured '+p.name+' at '+interval.label+'. '+state.spatialCalibration.points.filter(Boolean).length+'/9 ready.');render();}
  }catch(e){spatialStatus(e.message,true);}
+}
+function spatialCaptureAll(){
+ try{
+  if(!state.rows.length)throw Error('Load a recording before capturing nine calibration fixations.');
+  if(!state.confirmed)throw Error('Set the baseline head-forward frame before calibrating the nine known object positions.');
+  pause();
+  const basis=baselineBasis();if(!basis)throw Error('Cannot determine the baseline IMU orientation.');
+  const next=[],used=new Set();
+  // Work transactionally: do not replace an existing fit if any one CSV entry fails.
+  for(let i=0;i<9;i++){
+   const known=spatialTargetInputs(i);
+   if(!known.fixId)throw Error(known.name+': missing fixation_id. Assign all nine fixation numbers first.');
+   const interval=spatialFindIntervalById(known.fixId);
+   if(used.has(interval.key))throw Error('Fixation #'+known.fixId+' is assigned to more than one target.');
+   used.add(interval.key);
+   next.push(spatialBuildPoint(i,interval,known,basis));
+  }
+  spatialClearFit();state.spatialCalibration.points=next;
+  next.forEach((p,i)=>spatialRenderCapture(i,p));
+  el('spatialFit').disabled=false;
+  state.spatialCalibration.csvReady=true;
+  spatialFitAll();
+ }catch(e){spatialStatus(e.message,true);}
+}
+function spatialParseCsv(source){
+ const [head,...lines]=parseRows(source);
+ const normalize=x=>String(x||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'');
+ const hdr=head.map(normalize);
+ const find=(...names)=>hdr.findIndex(h=>names.some(name=>h===normalize(name)));
+ const ci={name:find('name','object','item','target'),h:find('horizontal_angle_deg','horizontal angle (°)','horizontal angle','x_angle_deg','x_angle'),v:find('vertical_angle_deg','vertical angle (°)','vertical angle','y_angle_deg','y_angle'),d:find('distance_m','distance (m)','distance','depth_m'),fix:find('fixation_id','fixation number','fixation','fixationid')};
+ const missing=Object.entries(ci).filter(([k,val])=>val<0).map(([k])=>k);
+ if(missing.length)throw Error('Calibration CSV is missing columns: '+missing.join(', ')+'. Download the template for the expected format.');
+ if(lines.length!==9)throw Error('Calibration CSV must contain exactly nine data rows (found '+lines.length+').');
+ const out=[],seen=new Set();
+ for(let i=0;i<9;i++){
+  const line=lines[i],fixId=String(line[ci.fix]||'').trim().replace(/^#/,'');
+  const o={name:String(line[ci.name]||'').trim(),h:String(line[ci.h]||'').trim(),v:String(line[ci.v]||'').trim(),distance:String(line[ci.d]||'').trim(),fixId};
+  if(!o.name)throw Error('CSV row '+(i+2)+': missing target name.');
+  if(!o.h||!o.v||!o.distance||!Number.isFinite(Number(o.h))||!Number.isFinite(Number(o.v))||!Number.isFinite(Number(o.distance)))throw Error('CSV row '+(i+2)+': angles and distances must be numbers.');
+  if(Math.abs(Number(o.h))>80||Math.abs(Number(o.v))>65||Number(o.distance)<0.15||Number(o.distance)>30)throw Error('CSV row '+(i+2)+': coordinates outside supported calibration range.');
+  if(fixId&&!/^\d+$/.test(fixId))throw Error('CSV row '+(i+2)+': fixation_id must be a whole-number fixation ID or blank until selected.');
+  if(fixId&&seen.has(fixId))throw Error('CSV row '+(i+2)+': fixation #'+fixId+' was used twice.');
+  if(fixId)seen.add(fixId);out.push(o);
+ }
+ return out;
+}
+async function spatialImportCsv(file){
+ try{
+  const imported=spatialParseCsv(await file.text());
+  spatialReset(false,true);
+  imported.forEach((p,i)=>{
+   el('spatialName'+i).value=p.name;
+   el('spatialH'+i).value=p.h;el('spatialV'+i).value=p.v;el('spatialD'+i).value=p.distance;el('spatialFix'+i).value=p.fixId;
+   el('spatialMeta'+i).textContent=p.name+' · fixation #'+p.fixId+' · awaiting capture';
+  });
+  state.spatialCalibration.csvReady=imported.every(p=>Boolean(p.fixId));state.spatialCalibration.csvName=file.name;
+  document.querySelector('.spatial-cal-card').open=true;
+  if(state.spatialCalibration.csvReady&&state.rows.length&&state.confirmed)spatialCaptureAll();
+  else spatialStatus('Imported '+file.name+' (9 locations). '+(!state.spatialCalibration.csvReady?'Fill in the nine fixation IDs, then use “Capture all fixation IDs + calibrate”.':!state.rows.length?'Load the Neon recording and select its baseline.':'Set the baseline head-forward frame to capture all points automatically.'));
+ }catch(e){spatialStatus('CSV import error: '+e.message,true);}
+}
+function spatialDownloadTemplate(){
+ const headers=['name','horizontal_angle_deg','vertical_angle_deg','distance_m','fixation_id'];
+ const rows=[headers,...Array.from({length:9},(_,i)=>['Target '+(i+1),'','','',''])];
+ const quote=v=>{const x=String(v);return /[,"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;};
+ const blob=new Blob([rows.map(r=>r.map(quote).join(',')).join('\n')+'\n'],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='nine_point_spatial_calibration_template.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 function solveThreeByThree(matrix,values){
  const a=matrix.map((row,i)=>[...row,values[i]]);
@@ -1075,8 +1175,9 @@ function spatialFitAll(){
   state.spatialCalibration.previousDepthFit=state.calibration.fit;
   state.spatialCalibration.fit=fit;
   state.calibration.fit={...depth,rms:rms(depthResidual),source:'nine-point'};
-  const results='Applied nine-point calibration.\nAngular fit RMS: '+rms(angularResidual).toFixed(2)+'° · leave-one-out: '+rms(loo).toFixed(2)+'°\nDepth angle RMS: '+rms(depthResidual).toFixed(3)+'° · leave-one-out: '+(looDepth.length?rms(looDepth).toFixed(3)+'°':'n/a')+'.\nThe original left/right eye angles remain unchanged.';
+  const results='Applied nine-point angular AND vergence-distance calibration.\nAngular fit RMS: '+rms(angularResidual).toFixed(2)+'° · leave-one-out: '+rms(loo).toFixed(2)+'°\nDepth angle RMS: '+rms(depthResidual).toFixed(3)+'° · leave-one-out: '+(looDepth.length?rms(looDepth).toFixed(3)+'°':'n/a')+'.\nVergence depth now uses all nine target distances. The original left/right eye angles remain unchanged.';
   spatialStatus(results,rms(loo)>5);
+  displayCalibrationStatus('Vergence calibrated automatically using all nine spatial targets (three-point calibration not needed).');
   render();
  }catch(e){spatialStatus(e.message,true);}
 }
@@ -1095,6 +1196,16 @@ function spatialBuildUI(){
   const title=document.createElement('strong');title.textContent='Target '+(i+1);
   const button=document.createElement('button');button.type='button';button.id='spatialCapture'+i;button.textContent='Use selected';button.addEventListener('click',()=>spatialCapture(i));
   top.append(title,button);box.append(top);
+  const ids=document.createElement('div');ids.className='spatial-identifiers';
+  for(const [suffix,label,placeholder] of [['Name','Object name','e.g. Doll'],['Fix','Fixation ID','e.g. 26']]){
+   const wrap=document.createElement('label');wrap.textContent=label;
+   const input=document.createElement('input');input.type=suffix==='Fix'?'text':'text';input.placeholder=placeholder;input.id='spatial'+suffix+i;
+   if(suffix==='Name')input.value='Target '+(i+1);
+   input.addEventListener('change',()=>{
+    if(state.spatialCalibration.points[i]){spatialClearFit();state.spatialCalibration.points[i]=null;el('spatialMeta'+i).textContent='Edited; capture again';el('spatialFit').disabled=true;spatialStatus('Target changed. Re-capture it, or click “Capture all fixation IDs + calibrate”.');render();}
+   });wrap.append(input);ids.append(wrap);
+  }
+  box.append(ids);
   const fields=document.createElement('div');fields.className='spatial-fields';
   for(const [suffix,label,lo,hi,step] of [['H','Horizontal °',-80,80,.1],['V','Vertical °',-65,65,.1],['D','Distance m',.15,30,.01]]){
    const wrap=document.createElement('label');wrap.textContent=label;
@@ -1294,7 +1405,7 @@ function seekVideoForDataTime(t){if(!state.videoReady)return;const wanted=t+vide
 function pause(){state.playing=false;cancelAnimationFrame(state.raf);state.raf=0;el('play').textContent='▶ Play';el('play').classList.remove('is-paused');video.pause();}
 function findDataIndex(t){let lo=0,hi=state.rows.length-1;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(state.rows[mid].sec<=t)lo=mid;else hi=mid-1;}return lo;}
 function setIndex(i,playback=false){if(!state.rows.length)return;state.index=clamp(Math.floor(Number(i)||0),0,state.rows.length-1);el('timeNow').textContent=state.rows[state.index].sec.toFixed(2)+' s';updateNavigator();if(!playback&&state.playing)pause();if(!playback)seekVideoForDataTime(state.rows[state.index].sec);render();}
-function calibrate(){if(!state.rows.length)return;const r=state.rows[state.index];if(!Number.isFinite(r.gyroHead)&&!Number.isFinite(r.headWorld)){el('uiError').textContent='No valid head orientation in this row.';el('uiError').hidden=false;return;}el('uiError').hidden=true;pause();state.baseline=state.index;state.confirmed=true;spatialReset(false,true);el('baselineNote').textContent='✓ Baseline · row '+(state.baseline+1).toLocaleString();objectMessage('Objects are anchored to the current baseline head-forward ray.');render();}
+function calibrate(){if(!state.rows.length)return;const r=state.rows[state.index];if(!Number.isFinite(r.gyroHead)&&!Number.isFinite(r.headWorld)){el('uiError').textContent='No valid head orientation in this row.';el('uiError').hidden=false;return;}el('uiError').hidden=true;pause();state.baseline=state.index;state.confirmed=true;spatialReset(false,true);el('baselineNote').textContent='✓ Baseline · row '+(state.baseline+1).toLocaleString();objectMessage('Objects are anchored to the current baseline head-forward ray.');if(state.spatialCalibration.csvReady){spatialCaptureAll();}else render();}
 function maybeStartVideo(target){if(!state.videoReady||!state.playing||target<0||target>=video.duration){if(state.videoReady&&video.duration<=target)video.pause();return;}if(video.paused){video.currentTime=target;video.playbackRate=state.speed;video.play().catch(err=>setVideoStatus('Video playback unavailable: '+err.message,true));}}
 function play(){if(!state.rows.length)return;if(state.playing){pause();return;}if(state.index===state.rows.length-1)setIndex(state.baseline);state.playing=true;el('play').textContent='❚❚ Pause';el('play').classList.add('is-paused');state.epoch=performance.now();state.startS=state.rows[state.index].sec;let t0=state.startS+videoOffset();if(state.videoReady&&t0>=0&&t0<video.duration){seekVideoForDataTime(state.startS);maybeStartVideo(t0);}const tick=now=>{if(!state.playing)return;let dataT=state.startS+(now-state.epoch)/1000*state.speed,target=dataT+videoOffset();if(state.videoReady){maybeStartVideo(target);if(target>=0&&target<video.duration&&!video.paused&&Math.abs(target-video.currentTime)>.10)video.currentTime=clamp(target,0,video.duration);if(target>=video.duration)video.pause();updateVideoClock();}setIndex(findDataIndex(dataT),true);if(state.index===state.rows.length-1){pause();return;}state.raf=requestAnimationFrame(tick);};state.raf=requestAnimationFrame(tick);}
 const scene=el('scene'),g=scene.getContext('2d'),over=el('overview'),og=over.getContext('2d');let sw=0,sh=0,ow=0,oh=0;
@@ -1586,7 +1697,7 @@ el('worldFile').addEventListener('change',async event=>{
 });
 el('camFile').addEventListener('change',async event=>{
  const file=event.target.files?.[0];if(!file)return;
- try{state.cameraCalibration=parseSceneCamera(await file.text());spatialReset(false,true);el('camFileName').textContent=file.name;el('camFile').closest('.upload-slot').classList.add('loaded');objectMessage('Camera calibration loaded. Visual gaze direction is now available.');render();}
+ try{state.cameraCalibration=parseSceneCamera(await file.text());spatialReset(false,true);el('camFileName').textContent=file.name;el('camFile').closest('.upload-slot').classList.add('loaded');objectMessage('Camera calibration loaded. Visual gaze direction is now available.');if(state.spatialCalibration.csvReady&&state.rows.length&&state.confirmed)spatialCaptureAll();else render();}
  catch(err){state.cameraCalibration=null;objectMessage('Camera calibration error: '+err.message,true);}event.target.value='';
 });
 el('gazeFile').addEventListener('change',async event=>{
@@ -1613,7 +1724,10 @@ el('aiDepthFile').addEventListener('change',async event=>{
 });
 spatialBuildUI();
 el('spatialFit').addEventListener('click',spatialFitAll);
-el('spatialReset').addEventListener('click',()=>spatialReset());
+el('spatialReset').addEventListener('click',()=>{state.spatialCalibration.csvReady=false;state.spatialCalibration.csvName=null;spatialReset();});
+el('spatialCaptureAll').addEventListener('click',spatialCaptureAll);
+el('spatialTemplate').addEventListener('click',spatialDownloadTemplate);
+el('spatialCsv').addEventListener('change',async event=>{const file=event.target.files?.[0];if(file)await spatialImportCsv(file);event.target.value='';});
 el('objectSave').addEventListener('click',saveObject);
 el('objectCancel').addEventListener('click',cancelObjectEdit);
 el('objectFromGaze').addEventListener('click',populateAnglesFromCurrentGaze);
@@ -1636,7 +1750,7 @@ el('rowNumber').addEventListener('change',e=>{
 el('calibrate').addEventListener('click',calibrate);el('play').addEventListener('click',play);
 el('prev').addEventListener('click',()=>changeNav(-1));el('step').addEventListener('click',()=>changeNav(1));
 el('toBaseline').addEventListener('click',()=>setIndex(state.baseline));
-el('orientationMode').addEventListener('change',()=>{pause();spatialReset(false,true);render();});
+el('orientationMode').addEventListener('change',()=>{pause();spatialReset(false,true);if(state.spatialCalibration.csvReady&&state.rows.length&&state.confirmed)spatialCaptureAll();else render();});
 for(let i=0;i<3;i++)el('calCapture'+i).addEventListener('click',()=>captureCalibrationPoint(i));
 el('calFit').addEventListener('click',fitVergenceCalibration);el('calClear').addEventListener('click',()=>clearVergenceCalibration());
 for(const btn of document.querySelectorAll('[data-speed]'))btn.addEventListener('click',()=>{if(state.playing)pause();state.speed=Number(btn.dataset.speed);video.playbackRate=state.speed;el('playSpeedLabel').textContent=state.speed+'×';document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===btn));});
