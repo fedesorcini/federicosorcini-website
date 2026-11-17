@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
+<!-- Version 20: compact readouts, red video gaze dot, head-only overhead view -->
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
@@ -320,6 +321,11 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 .gaze-marker-state.warn{color:#A15B3A}
 .gaze-marker-state[hidden]{display:none}
 
+/* v20: simplified live readouts. Hide descriptive sublines without removing their JS target IDs. */
+.metrics .micro { display:none !important; }
+.metric-row .readout { min-height:70px; padding-bottom:9px; }
+@media(max-width:590px){ .metric-row .readout { min-height:69px; } }
+
 /* v19: folder-first import; individual file controls retained as a fallback. */
 .folder-picker{display:block;position:relative;overflow:hidden;border-radius:7px;background:#709C82;color:#102F23;border:1px solid #b8d7c4;padding:14px 12px;cursor:pointer;text-align:center;font-size:15px;font-weight:800}
 .folder-picker:hover{background:#88B49A}
@@ -420,7 +426,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 </section>
 
 <div class="viewer-pair">
-<section class="stage"><div class="stage-top"><div><div class="stage-title">Participant · overhead</div></div><span class="pill prov" id="status">Provisional baseline</span></div><div class="stage-canvas"><canvas id="scene" role="img" aria-label="Top-down head, fixed shoulders, left eye direction, and head heading"></canvas></div><div class="legend"><span><i class="swatch gray"></i> Body (static)</span><span><i class="swatch blue"></i> Head direction</span><span><i class="swatch gold"></i> Left eye direction</span><span><i class="swatch purple"></i> Right eye direction</span></div></section>
+<section class="stage"><div class="stage-top"><div><div class="stage-title">Participant · overhead</div></div><span class="pill prov" id="status">Provisional baseline</span></div><div class="stage-canvas"><canvas id="scene" role="img" aria-label="Top-down head orientation with left and right eye directions"></canvas></div><div class="legend"><span><i class="swatch blue"></i> Head direction</span><span><i class="swatch gold"></i> Left eye direction</span><span><i class="swatch purple"></i> Right eye direction</span></div></section>
 <section class="video-stage">
   <div class="stage-top"><div><div class="stage-title">Video</div></div><span class="pill" id="videoIndicator">No video</span></div>
   <div class="video-display"><video id="video" playsinline preload="metadata" aria-label="Uploaded recording video"></video><canvas id="gazeOverlay" class="gaze-overlay" aria-hidden="true"></canvas><div id="videoPlaceholder" class="video-placeholder"><span style="font-size:34px">▣</span><strong>No video loaded</strong></div></div>
@@ -728,9 +734,8 @@ function drawGazeOverlay(){
  const scale=Math.min(w/iw,h/ih),left=(w-iw*scale)/2,top=(h-ih*scale)/2;
  const px=left+point.x*scale,py=top+point.y*scale;
  // Distinct from the left/right eye arrows; visible over bright and dark video.
- gazeCtx.beginPath();gazeCtx.arc(px,py,10,0,Math.PI*2);gazeCtx.fillStyle='#44D5A7';gazeCtx.fill();
- gazeCtx.lineWidth=3.5;gazeCtx.strokeStyle='#17384A';gazeCtx.stroke();
- gazeCtx.beginPath();gazeCtx.arc(px,py,3,0,Math.PI*2);gazeCtx.fillStyle='#ffffff';gazeCtx.fill();
+ gazeCtx.beginPath();gazeCtx.arc(px,py,9,0,Math.PI*2);gazeCtx.fillStyle='#E13C35';gazeCtx.fill();
+ gazeCtx.lineWidth=2.5;gazeCtx.strokeStyle='#FFFFFF';gazeCtx.stroke();
 }
 function validateRecording(tables){const ids=[];for(const k of ['eye','imu','fix']){const t=tables[k],ri=t.index('recording id'),si=t.index('section id');if(ri<0||si<0)continue;const first=t.rows[0];ids.push([k,valueAt(first,ri),valueAt(first,si)]);}if(ids.length>1){for(const other of ids.slice(1)){if(other[1]!==ids[0][1]||other[2]!==ids[0][2])throw Error('The exports are from different recordings or sections. Please upload matching files.');}}}
 function buildMerged(){const table={};for(const kind of ['eye','imu','fix']){table[kind]=parseTable(state.sources[kind].text,kind==='fix'?['start timestamp [ns]','end timestamp [ns]','fixation id']:['timestamp [ns]']);}
@@ -801,8 +806,7 @@ function txt(ctx,t,x,y,size,color,align='center',weight=500){ctx.font=weight+' '
 function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
  if(el('guides').checked){for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD,L=Math.min(220,w*.39,h*.43);stroke(g,cx,cy,cx+Math.sin(a)*L,cy-Math.cos(a)*L,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(L+11),cy-Math.cos(a)*(L+11),10,'#7C898F');}for(const r of [100,165,225]){g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,Math.PI,Math.PI*2);g.stroke();}}
  stroke(g,cx,0,cx,cy,'#9DAEA6',1.1,[6,7]);txt(g,'BASELINE HEAD / 0°',cx,18,10,'#324C63','center',800);
- g.save();g.translate(cx,cy);const scale=Math.min(w/550,h/440,1.12);g.scale(scale,scale);
- g.beginPath();g.moveTo(-54,47);g.bezierCurveTo(-65,58,-117,59,-133,108);g.lineTo(-124,240);g.quadraticCurveTo(0,270,124,240);g.lineTo(133,108);g.bezierCurveTo(117,59,65,58,54,47);g.closePath();g.fillStyle='#526980';g.fill();g.lineWidth=2;g.strokeStyle='#354F65';g.stroke();g.beginPath();g.roundRect(-23,43,46,49,18);g.fillStyle='#43576A';g.fill();stroke(g,-98,105,-105,187,'#617788',2);stroke(g,98,105,105,187,'#617788',2);txt(g,'TORSO · NOT TRACKED',0,183,10,'#E7EDF0','center',750);
+ g.save();g.translate(cx,cy);const scale=Math.min(w/340,h/320,1.65);g.scale(scale,scale);
  const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
  g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
  g.beginPath();g.ellipse(0,0,54,62,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.8;g.stroke();g.beginPath();g.ellipse(-55,5,8,13,0,0,Math.PI*2);g.ellipse(55,5,8,13,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,12,47,43,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-12,-55);g.lineTo(0,-78);g.lineTo(12,-55);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
@@ -876,7 +880,7 @@ function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[
  const b=state.rows[state.baseline];
  const fusedHead=Number.isFinite(r.headUnwrap)&&Number.isFinite(b.headUnwrap)?r.headUnwrap-b.headUnwrap:NaN;
  const rawHead=Number.isFinite(r.gyroHeadUnwrap)&&Number.isFinite(b.gyroHeadUnwrap)?r.gyroHeadUnwrap-b.gyroHeadUnwrap:NaN;
- el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2):'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2):'—';const verg=vergenceForRow(r),cal=calibratedDistanceForRow(r);
+ el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2)+' mm':'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2)+' mm':'—';const verg=vergenceForRow(r),cal=calibratedDistanceForRow(r);
  if(state.calibration.fit){
   el('vergenceValue').textContent=cal.meters===Infinity?'>3 m':fmtMeters(cal.meters);
   el('vergenceCaption').textContent='Calibrated · raw '+fmtMeters(verg.meters)+' · '+cal.reason;
