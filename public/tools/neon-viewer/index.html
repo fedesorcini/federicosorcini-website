@@ -7,7 +7,7 @@
 <meta name="description" content="Explore Pupil Labs Neon eye and head movement data in a synchronized top-down viewer with local CSV processing, video playback and vergence estimates." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
-<meta property="og:description" content="A browser-based tool for exploring synchronized eye, head and scene-video recordings." />
+<meta property="og:description" content="A browser-based tool for exploring synchronized eye, head, scene-video and optional imported AI depth recordings." />
 <meta property="og:type" content="website" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -273,6 +273,45 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   .metric-row .value{font-size:24px}
   .metric-row .label{font-size:10px}
 }
+
+/* Optional DA3/Neon Player depth-estimation import; the model is NOT run by this page. */
+.ai-depth-card .section-title{margin-bottom:9px}
+.ai-depth-card .upload-slot{min-height:58px}
+.ai-depth-help{color:rgba(255,255,255,.82);font-size:11px;line-height:1.45;margin:10px 0 0}
+.ai-depth-help a{color:#F0E8D8;text-underline-offset:2px}
+.ai-depth-state{margin-top:10px;color:#E5EDDD;font-size:11px;overflow-wrap:anywhere}
+.ai-depth-state.error{color:#FFD9C5}
+.metric-row-primary.has-ai-depth{grid-template-columns:repeat(4,minmax(0,1fr))}
+.metric-row-primary .readout[hidden]{display:none}
+.value.ai{color:#4E718A}
+@media(max-width:1020px){.metric-row-primary.has-ai-depth{display:flex}}
+
+
+/* v17: fixation navigation and 3-point calibration */
+.nav-mode{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:3px 0 13px}
+.nav-mode button{border:1px solid rgba(240,232,216,.55);color:var(--beige);background:transparent;border-radius:5px;padding:7px 5px;font-size:12px;font-weight:700}
+.nav-mode button[aria-pressed="true"]{background:var(--beige);color:var(--bluegray);border-color:var(--beige)}
+.nav-mode button:disabled{opacity:.4}
+.compact-buttons{grid-template-columns:1.2fr 1fr 1fr}
+.nav-context{min-height:17px;font-size:11px;margin-top:6px;color:rgba(255,255,255,.82);font-variant-numeric:tabular-nums}
+.cal-capture-choice{margin:5px 0 10px}
+.cal-target{padding:9px 0;border-top:1px solid rgba(240,232,216,.23)}
+.cal-target-head{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.cal-distance{font-size:16px;font-weight:700;color:var(--beige);font-variant-numeric:tabular-nums}
+.cal-capture{padding:7px 10px;border-radius:5px;border:1px solid rgba(240,232,216,.62);background:transparent;color:var(--beige);font-size:12px;font-weight:700}
+.cal-capture:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.cal-capture:disabled{opacity:.4}
+.cal-target-meta{color:rgba(255,255,255,.74);font-size:11px;line-height:1.38;margin-top:4px;overflow-wrap:anywhere}
+.cal-actions{display:grid;grid-template-columns:1.55fr .75fr;gap:8px;margin-top:11px}
+.cal-fit{background:#36724E;color:#fff;border:1px solid #36724E;border-radius:5px;padding:10px 7px;font-weight:700;font-size:12px}
+.cal-fit:hover:not(:disabled){background:#2C6041}
+.cal-clear{background:transparent;color:var(--beige);border:1px solid rgba(240,232,216,.6);border-radius:5px;padding:9px 7px;font-weight:700;font-size:12px}
+.cal-clear:hover{background:rgba(255,255,255,.12)}
+.cal-result{margin-top:10px;padding:9px 10px;background:rgba(255,255,255,.09);border:1px solid rgba(240,232,216,.2);border-radius:5px;font-size:11.5px;color:#eef7ee;line-height:1.5}
+.cal-result.error{background:rgba(130,44,30,.15);color:#ffddcf}
+.cal-result[hidden]{display:none}
+.cal-intro{color:rgba(255,255,255,.82);font-size:11px;line-height:1.45;margin:0 0 9px}
+
 </style>
 </head>
 <body>
@@ -283,10 +322,12 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 <section class="card quick-panel">
   <div class="section-title">Playback &amp; baseline</div>
   <div class="main-actions"><button class="control play" id="play" type="button" disabled>▶ Play</button><button class="primary" id="calibrate" type="button" disabled>Set this frame as baseline</button></div>
-  <div class="rowlabel"><label for="rowNumber">Data row</label><input id="rowNumber" class="field" disabled type="number" value="1" min="1" step="1"/></div>
-  <input id="scrub" class="input-range" disabled type="range" min="0" max="100" value="0" aria-label="Scrub recording"/>
+  <div class="nav-mode" role="group" aria-label="Navigation mode"><button id="navByRow" type="button" aria-pressed="true">By row</button><button id="navByFix" type="button" aria-pressed="false" disabled>By fixation</button></div>
+  <div class="rowlabel"><label for="rowNumber" id="navLabel">Data row</label><input id="rowNumber" class="field" disabled type="number" value="1" min="1" step="1"/></div>
+  <input id="scrub" class="input-range" disabled type="range" min="0" max="100" value="0" aria-label="Scrub recording by row"/>
   <div class="times"><span id="timeNow">0.00 s</span><span id="timeEnd">—</span></div>
-  <div class="compact-buttons"><button class="control" id="toBaseline" type="button" disabled>↶ Go to baseline</button><button class="control" id="step" type="button" disabled>+1 frame</button></div>
+  <div class="nav-context" id="navContext">No fixations loaded</div>
+  <div class="compact-buttons"><button class="control" id="toBaseline" type="button" disabled>↶ Baseline</button><button class="control" id="prev" type="button" disabled>−1 row</button><button class="control" id="step" type="button" disabled>+1 row</button></div>
   <div class="baseline-status" id="baselineNote">Baseline not selected</div>
 </section>
 <section class="card import-card">
@@ -300,6 +341,23 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="file-info"><strong id="filename">Select the three CSV files</strong><div class="file-meta" id="fileStats">Video can be loaded before or after the CSVs</div></div>
   <button class="control export" type="button" id="exportCsv" disabled>↓ Export aligned CSV</button>
   <div id="uiError" class="ui-error" hidden></div>
+</section>
+<section class="card vergence-cal-card">
+  <div class="section-title">Vergence calibration</div>
+  <p class="cal-intro">Choose three known viewing distances. Select a fixation or row above, then assign it below.</p>
+  <div class="rowlabel"><label for="calCaptureMode">Use measurements from</label></div>
+  <select class="mode-select cal-capture-choice" id="calCaptureMode"><option value="fixation">Selected fixation (whole event)</option><option value="frame">Selected frame ±250 ms</option></select>
+  <div class="cal-target"><div class="cal-target-head"><span class="cal-distance">0.5 m</span><button id="calCapture0" class="cal-capture" disabled type="button">Use selected</button></div><div class="cal-target-meta" id="calStatus0">Not assigned</div></div>
+  <div class="cal-target"><div class="cal-target-head"><span class="cal-distance">1.0 m</span><button id="calCapture1" class="cal-capture" disabled type="button">Use selected</button></div><div class="cal-target-meta" id="calStatus1">Not assigned</div></div>
+  <div class="cal-target"><div class="cal-target-head"><span class="cal-distance">3.0 m</span><button id="calCapture2" class="cal-capture" disabled type="button">Use selected</button></div><div class="cal-target-meta" id="calStatus2">Not assigned</div></div>
+  <div class="cal-actions"><button id="calFit" class="cal-fit" disabled type="button">Apply calibration</button><button id="calClear" class="cal-clear" type="button">Reset</button></div>
+  <div id="calResult" class="cal-result" aria-live="polite" hidden></div>
+</section>
+<section class="card ai-depth-card">
+  <div class="section-title">AI depth estimation <span style="font-size:11px;font-weight:400;opacity:.8">optional</span></div>
+  <label class="upload-slot"><span>Depth Anything V3 results <small id="aiDepthFileName">Choose gaze_depth_output.csv</small></span><input id="aiDepthFile" type="file" accept=".csv,text/csv" aria-label="Upload Depth Anything 3 CSV from Neon Player" /></label>
+  <div id="aiDepthStatus" class="ai-depth-state" aria-live="polite">No depth estimates loaded</div>
+  <p class="ai-depth-help">Run the <a href="https://docs.pupil-labs.com/alpha-lab/depth-estimation/" target="_blank" rel="noopener noreferrer">Pupil Labs DA3 plugin</a> in Neon Player first. Upload its CSV here; select its gaze_depth.mp4 as the video to see the heatmap.</p>
 </section>
 <section class="card settings-card">
   <div class="section-title">Settings</div>
@@ -322,6 +380,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <div class="readout"><div class="label">Head rotation Δ</div><div class="value blue" id="headValue">—</div><div class="micro" id="headMethodLabel">Fused quaternion</div></div>
     <div class="readout"><div class="label">Fixation ID</div><div class="value violet" id="fixValue">—</div><div class="micro" id="fixCaption">Event membership</div></div>
     <div class="readout"><div class="label">Vergence distance</div><div class="value mint" id="vergenceValue">—</div><div class="micro" id="vergenceCaption">Estimated · IPD 64 mm</div></div>
+    <div class="readout" id="aiDepthMetric" hidden><div class="label">AI scene depth · DA3</div><div class="value ai" id="aiDepthValue">—</div><div class="micro" id="aiDepthCaption">Closest scene-video frame</div></div>
   </div>
   <div class="metric-row metric-row-eyes" aria-label="Eye direction and pupil measurements">
     <div class="readout"><div class="label">Left eye direction</div><div class="value gold" id="eyeValue">—</div><div class="micro">Relative to baseline head</div></div>
@@ -383,6 +442,135 @@ function vergenceForRow(row){
  if(!(meters>0) || !Number.isFinite(meters)) return {meters:NaN,reason:'No finite intersection'};
  return {meters,reason:meters>100?'Near-parallel · uncertain':'Horizontal optical-axis estimate'};
 }
+// Signed binocular vergence (degrees). Defined even for divergent or parallel
+// eyes, unlike the positive-distance-only raw intersection estimate.
+function binocularAngleDeg(row){
+ if(!row?.leftValid||!row?.rightValid)return NaN;
+ const dirs=[];
+ for(const p of ['left','right']){
+  const x=row[p+'X'],y=row[p+'Y'],z=row[p+'Z'],norm=Math.hypot(x,y,z);
+  if(!(norm>0.2)||!Number.isFinite(norm))return NaN;
+  const vec=sceneDirectionToImu(x/norm,y/norm,z/norm);
+  if(!(vec[1]>0.05))return NaN;
+  dirs.push(Math.atan2(vec[0],vec[1])*DEG);
+ }
+ return wrap180(dirs[0]-dirs[1]);
+}
+function medianOf(values){if(!values.length)return NaN;const a=[...values].sort((x,y)=>x-y),n=a.length;return n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2;}
+function sampleAngles(startIndex,endIndex){
+ const all=[];for(let i=startIndex;i<=endIndex;i++){const v=binocularAngleDeg(state.rows[i]);if(Number.isFinite(v))all.push(v);}
+ if(all.length<8)throw Error('Too few valid binocular samples ('+all.length+'). Select a longer fixation or another frame.');
+ const mid=medianOf(all),mad=medianOf(all.map(x=>Math.abs(x-mid)));
+ const tolerance=Math.max(0.35,4*1.4826*mad);
+ const kept=all.filter(x=>Math.abs(x-mid)<=tolerance);
+ return {angle:medianOf(kept),n:kept.length,total:all.length,mad:medianOf(kept.map(x=>Math.abs(x-medianOf(kept))))};
+}
+function calibratedDistanceForRow(row){
+ const fit=state.calibration.fit;
+ if(!fit)return {meters:NaN,reason:'Not calibrated'};
+ const theta=binocularAngleDeg(row);
+ if(!Number.isFinite(theta))return {meters:NaN,reason:'Both eyes must be open'};
+ const diff=theta-fit.a;
+ if(!(diff>0.001))return {meters:Infinity,reason:'At/beyond far limit · unstable'};
+ const meters=fit.b/diff;
+ if(!(meters>0)||!Number.isFinite(meters))return {meters:NaN,reason:'No usable calibrated distance'};
+ const outside=meters<0.5||meters>3;
+ return {meters,reason:outside?'Extrapolated beyond 0.5–3 m · uncertain':'Within calibrated 0.5–3 m range'};
+}
+function makeFixationIndex(rows){
+ const groups=[],lookup=new Map();
+ for(let i=0;i<rows.length;i++){
+  const item=rows[i],key=item.fixRaw;
+  if(!key){item.fixOrdinal=-1;continue;}
+  let g=lookup.get(key);
+  if(!g){g={id:String(item.fix),start:i,end:i,ordinal:groups.length};lookup.set(key,g);groups.push(g);}
+  g.end=i;item.fixOrdinal=g.ordinal;
+ }
+ for(const g of groups){g.medianIndex=Math.floor((g.start+g.end)/2);g.count=g.end-g.start+1;g.durationMs=1000*(rows[g.end].sec-rows[g.start].sec);}
+ return groups;
+}
+function closestFixationOrdinal(rowIndex){
+ const a=state.fixations;if(!a.length)return -1;
+ const known=state.rows[rowIndex]?.fixOrdinal;if(Number.isInteger(known)&&known>=0)return known;
+ let lo=0,hi=a.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(a[mid].medianIndex<rowIndex)lo=mid+1;else hi=mid;}
+ if(lo>0&&Math.abs(a[lo-1].medianIndex-rowIndex)<Math.abs(a[lo].medianIndex-rowIndex))return lo-1;
+ return lo;
+}
+function updateNavigator(){
+ if(!state.rows.length)return;
+ const inFix=state.navMode==='fix'&&state.fixations.length>0;
+ const row=state.rows[state.index],group=inFix?state.fixations[closestFixationOrdinal(state.index)]:null;
+ el('navByRow').setAttribute('aria-pressed',String(!inFix));el('navByFix').setAttribute('aria-pressed',String(inFix));
+ el('navLabel').textContent=inFix?'Fixation ID':'Data row';
+ el('scrub').setAttribute('aria-label',inFix?'Scrub recording by fixation':'Scrub recording by row');
+ el('scrub').max=inFix?Math.max(0,state.fixations.length-1):state.rows.length-1;
+ el('scrub').value=inFix?group?.ordinal??0:state.index;
+ el('rowNumber').min=inFix?0:1;
+ el('rowNumber').max=inFix?state.fixations.reduce((m,g)=>Math.max(m,Number(g.id)||0),1):state.rows.length;
+ el('rowNumber').value=inFix?group?.id??'':state.index+1;
+ el('prev').textContent=inFix?'← Prev fix.':'−1 row';el('step').textContent=inFix?'Next fix. →':'+1 row';
+ const actual=row.fixOrdinal>=0?state.fixations[row.fixOrdinal]:null;
+ el('navContext').textContent=actual?'Fixation #'+actual.id+' · '+actual.count+' rows · '+Math.round(actual.durationMs)+' ms':(inFix?'Between labeled fixations':'No fixation at this row');
+ el('prev').disabled=inFix?(!group||group.ordinal===0):state.index===0;
+ el('step').disabled=inFix?(!group||group.ordinal===state.fixations.length-1):state.index===state.rows.length-1;
+}
+function useFixationOrdinal(i){const group=state.fixations[i];if(group)setIndex(group.medianIndex);}
+function setNavMode(mode){
+ if(mode==='fix'&&!state.fixations.length)return;
+ state.navMode=mode;
+ if(mode==='fix'&&state.rows.length)useFixationOrdinal(closestFixationOrdinal(state.index));
+ else updateNavigator();
+}
+function changeNav(step){
+ if(state.navMode==='fix')useFixationOrdinal(clamp(closestFixationOrdinal(state.index)+step,0,state.fixations.length-1));
+ else setIndex(state.index+step);
+}
+function clearVergenceCalibration(skipRender=false){state.calibration={points:[null,null,null],fit:null};for(let i=0;i<3;i++)el('calStatus'+i).textContent='Not assigned';el('calFit').disabled=true;el('calResult').hidden=true;el('calResult').classList.remove('error');if(state.rows.length&&!skipRender)render();}
+function displayCalibrationStatus(message,isError=false){const node=el('calResult');node.hidden=false;node.textContent=message;node.classList.toggle('error',isError);}
+function captureCalibrationPoint(pointIndex){
+ if(!state.rows.length)return;
+ pause();
+ try{
+  const selected=state.index;
+  const mode=el('calCaptureMode').value;
+  let start,end,label,key;
+  if(mode==='fixation'){
+   const ordinal=state.rows[selected].fixOrdinal;
+   if(ordinal<0)throw Error('Current row has no fixation ID. Select a labeled fixation or choose the frame-window option.');
+   const group=state.fixations[ordinal];start=group.start;end=group.end;label='Fixation #'+group.id;key='fix:'+ordinal;
+  }else{
+   const t=state.rows[selected].sec;
+   start=selected;end=selected;
+   while(start>0&&state.rows[start-1].sec>=t-0.25)start--;
+   while(end+1<state.rows.length&&state.rows[end+1].sec<=t+0.25)end++;
+   label='Row '+(selected+1)+' ±250 ms';key='row:'+selected;
+  }
+  if(state.calibration.points.some((p,i)=>i!==pointIndex&&p?.key===key))throw Error('This same interval is already assigned to a different distance.');
+  const data=sampleAngles(start,end);
+  state.calibration.points[pointIndex]={...data,key,start,end,selected,label,distance:[0.5,1,3][pointIndex]};
+  state.calibration.fit=null;
+  el('calStatus'+pointIndex).textContent=label+' · '+data.n+' valid samples · '+data.angle.toFixed(2)+'°';
+  el('calFit').disabled=state.calibration.points.some(p=>!p);
+  displayCalibrationStatus('Saved '+[0.5,1,3][pointIndex]+' m point. '+(el('calFit').disabled?'Assign the remaining distances.':'All three points are ready to fit.'));
+  render();
+ }catch(err){displayCalibrationStatus(err.message,true);}
+}
+function fitVergenceCalibration(){
+ state.calibration.fit=null;
+ const points=state.calibration.points;
+ if(points.some(p=>!p))return;
+ const xs=points.map(p=>1/p.distance),ys=points.map(p=>p.angle);
+ if(!(ys[0]>ys[1]&&ys[1]>ys[2])){displayCalibrationStatus('Calibration angles are not ordered near > middle > far. Check the target labels and fixation intervals.',true);return;}
+ const xm=xs.reduce((a,b)=>a+b,0)/3,ym=ys.reduce((a,b)=>a+b,0)/3;
+ const den=xs.reduce((a,x)=>a+(x-xm)**2,0);
+ const b=xs.reduce((a,x,i)=>a+(x-xm)*(ys[i]-ym),0)/den,a=ym-b*xm;
+ if(!(b>0&&Number.isFinite(a)&&Number.isFinite(b))){displayCalibrationStatus('Unable to fit an increasing convergence relationship.',true);return;}
+ const residuals=ys.map((y,i)=>y-(a+b*xs[i]));
+ const rms=Math.sqrt(residuals.reduce((sum,v)=>sum+v*v,0)/3);
+ state.calibration.fit={a,b,rms};
+ displayCalibrationStatus('Applied · offset '+a.toFixed(2)+'° · gain '+b.toFixed(3)+' °·m · fit residual '+rms.toFixed(3)+'° RMS. Estimates beyond 0.5–3 m are extrapolated.');
+ render();
+}
 function fmtMeters(m){
  if(!Number.isFinite(m))return '—';
  if(m>100)return '>100 m';
@@ -404,8 +592,46 @@ function normalizedQ(q){const m=Math.hypot(...q);return Number.isFinite(m)&&m>.5
 function axisValid(row,prefix,threshold){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);const aperture=row[prefix+'Aperture'];return Number.isFinite(mag)&&mag>.2&&mag<2&&(!Number.isFinite(aperture)||aperture>=threshold);}
 function azimuthForEye(q,row,prefix){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);return topDownAzimuth(quaternionRotate(q,sceneDirectionToImu(row[prefix+'X']/mag,row[prefix+'Y']/mag,row[prefix+'Z']/mag)));}
 function unwrapField(rows,src,dst){let prev=NaN,cont=NaN;for(const r of rows){const v=r[src];if(Number.isFinite(v)){cont=Number.isFinite(prev)?cont+wrap180(v-prev):v;prev=v;r[dst]=cont;}else r[dst]=NaN;}}
-const state={rows:[],index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true};
+const state={rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0};
 const tickTime=(a,b)=>Number(a-b)/1e9;
+// The Neon Player plugin provides one output per scene-camera frame, with original
+// scene timestamps in integer nanoseconds. Match to eye-state timestamps, not
+// video.currentTime or a guessed frame rate. No AI inference runs here.
+function parseAiDepthCSV(content){
+ const lines=parseRows(content),headers=lines[0].map(h=>h.toLowerCase().trim());
+ const col=name=>headers.indexOf(name),timeCol=col('timestamp'),depthCol=col('depth_meters'),relativeCol=col('relative_inverse_depth');
+ if(timeCol<0 || (depthCol<0&&relativeCol<0))throw Error('Expected timestamp and depth_meters or relative_inverse_depth from the Neon Player DA3 plugin.');
+ const out=[];
+ for(const fields of lines.slice(1)){
+  let ts;try{ts=readTimestamp(fields[timeCol]);}catch(e){continue;}
+  const raw=depthCol>=0?fields[depthCol]:'';
+  const m=raw!==undefined&&raw!==''?Number(raw):NaN;
+  const rs=relativeCol>=0?fields[relativeCol]:'';
+  const relative=rs!==undefined&&rs!==''?Number(rs):NaN;
+  if((Number.isFinite(m)&&m>0)||(Number.isFinite(relative)&&relative>=0))out.push({ts,meters:Number.isFinite(m)&&m>0?m:NaN,relative:Number.isFinite(relative)?relative:NaN});
+ }
+ if(!out.length)throw Error('No valid depth samples in CSV.');
+ out.sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);
+ return out;
+}
+function nearestAiDepth(ts){
+ const arr=state.aiDepthRows;if(!arr.length||typeof ts!=='bigint')return null;
+ let lo=0,hi=arr.length;
+ while(lo<hi){const mid=(lo+hi)>>1;if(arr[mid].ts<ts)lo=mid+1;else hi=mid;}
+ let candidate=lo<arr.length?arr[lo]:null;
+ if(lo>0&&(!candidate||(ts-arr[lo-1].ts)<(candidate.ts-ts)))candidate=arr[lo-1];
+ // Prevent a gaze depth from a distant time or another recording being displayed.
+ return candidate&&(candidate.ts>ts?candidate.ts-ts:ts-candidate.ts)<=100000000n?candidate:null;
+}
+function updateAiDepthStatus(){
+ const node=el('aiDepthStatus');if(!state.aiDepthRows.length){node.textContent='No depth estimates loaded';node.classList.remove('error');return;}
+ const eyeCount=state.rows.length;if(!eyeCount){node.textContent=state.aiDepthRows.length.toLocaleString()+' frames loaded · add eye-state CSVs to align';node.classList.remove('error');return;}
+ // Sample max 5000 eye rows to estimate time overlap quickly even on large recordings.
+ const stride=Math.max(1,Math.floor(eyeCount/5000));let n=0,total=0;
+ for(let i=0;i<eyeCount;i+=stride){total++;if(nearestAiDepth(state.rows[i].ts))n++;}
+ state.aiMatchedCount=n;node.textContent=state.aiDepthRows.length.toLocaleString()+' DA3 frames · '+Math.round(n/Math.max(total,1)*100)+'% eye-data time coverage (sampled)';node.classList.toggle('error',n===0);
+}
+
 function validateRecording(tables){const ids=[];for(const k of ['eye','imu','fix']){const t=tables[k],ri=t.index('recording id'),si=t.index('section id');if(ri<0||si<0)continue;const first=t.rows[0];ids.push([k,valueAt(first,ri),valueAt(first,si)]);}if(ids.length>1){for(const other of ids.slice(1)){if(other[1]!==ids[0][1]||other[2]!==ids[0][2])throw Error('The exports are from different recordings or sections. Please upload matching files.');}}}
 function buildMerged(){const table={};for(const kind of ['eye','imu','fix']){table[kind]=parseTable(state.sources[kind].text,kind==='fix'?['start timestamp [ns]','end timestamp [ns]','fixation id']:['timestamp [ns]']);}
  const e=table.eye,m=table.imu,f=table.fix;for(const key of ['optical axis left x','optical axis left y','optical axis left z','optical axis right x','optical axis right y','optical axis right z']){if(e.index(key)<0)throw Error('Eye file missing '+key);}
@@ -448,11 +674,11 @@ function angles(i){const r=state.rows[i],b=state.rows[state.baseline];if(!r||!b)
  const out={head,headDraw:head};for(const prefix of ['left','right']){const k=fused?prefix+'Unwrap':prefix+'GyroUnwrap';const v=r[k],h=r[hk];out[prefix]=Number.isFinite(v)&&Number.isFinite(h)?wrap180(v-h):NaN;out[prefix+'World']=Number.isFinite(v)&&Number.isFinite(b[hk])?v-b[hk]:NaN;}return out;
 }
 function rebuild(){if(!['eye','imu','fix'].every(k=>state.sources[k]))return;pause();el('uiError').hidden=true;
- try{const merged=buildMerged();state.rows=merged.rows;state.tables=merged.tables;state.alignedMeta=merged.stats;state.index=0;state.baseline=state.rows.findIndex(r=>Number.isFinite(r.gyroHead));state.confirmed=false;state.index=state.baseline;
+ try{const merged=buildMerged();state.rows=merged.rows;state.fixations=makeFixationIndex(state.rows);state.navMode='row';clearVergenceCalibration(true);state.tables=merged.tables;state.alignedMeta=merged.stats;state.index=0;state.baseline=state.rows.findIndex(r=>Number.isFinite(r.gyroHead));state.confirmed=false;state.index=state.baseline;
  const n=merged.stats;el('filename').textContent=n.eye.toLocaleString()+' eye-state samples aligned';el('fileStats').textContent=n.matched.toLocaleString()+'/'+n.eye.toLocaleString()+' matched IMU · '+n.fixCount.toLocaleString()+' fixation-labeled · '+n.rightOpen.toLocaleString()+' right-eye open';
- el('scrub').max=state.rows.length-1;el('scrub').disabled=false;el('matchVideo').disabled=!state.videoReady;el('rowNumber').max=state.rows.length;el('rowNumber').disabled=false;for(const id of ['play','calibrate','toBaseline','step','exportCsv'])el(id).disabled=false;
- el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);resizeAll();
- }catch(err){state.rows=[];state.tables=null;state.alignedMeta=null;el('uiError').hidden=false;el('uiError').textContent='Could not align files: '+err.message;el('filename').textContent='Alignment failed';for(const id of ['play','calibrate','toBaseline','step','exportCsv'])el(id).disabled=true;}
+ el('scrub').max=state.rows.length-1;el('scrub').disabled=false;el('navByFix').disabled=!state.fixations.length;el('matchVideo').disabled=!state.videoReady;el('rowNumber').max=state.rows.length;el('rowNumber').disabled=false;for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2'])el(id).disabled=false;
+ el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);updateAiDepthStatus();resizeAll();
+ }catch(err){state.rows=[];state.fixations=[];clearVergenceCalibration(true);state.tables=null;state.alignedMeta=null;el('uiError').hidden=false;el('uiError').textContent='Could not align files: '+err.message;el('filename').textContent='Alignment failed';for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2','navByFix'])el(id).disabled=true;}
 }
 const video=el('video');
 function clockFmt(t){if(!Number.isFinite(t)||t<0)return '—';return Math.floor(t/60)+':'+(t%60).toFixed(2).padStart(5,'0');}
@@ -462,7 +688,7 @@ function setVideoStatus(msg,isError=false){const node=el('videoStatus');node.tex
 function seekVideoForDataTime(t){if(!state.videoReady)return;const wanted=t+videoOffset(),target=clamp(wanted,0,Number.isFinite(video.duration)?video.duration:wanted);if(Math.abs((video.currentTime||0)-target)>.018)video.currentTime=target;updateVideoClock();}
 function pause(){state.playing=false;cancelAnimationFrame(state.raf);state.raf=0;el('play').textContent='▶ Play';el('play').classList.remove('is-paused');video.pause();}
 function findDataIndex(t){let lo=0,hi=state.rows.length-1;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(state.rows[mid].sec<=t)lo=mid;else hi=mid-1;}return lo;}
-function setIndex(i,playback=false){if(!state.rows.length)return;state.index=clamp(Math.floor(Number(i)||0),0,state.rows.length-1);el('rowNumber').value=state.index+1;el('scrub').value=state.index;el('timeNow').textContent=state.rows[state.index].sec.toFixed(2)+' s';if(!playback&&state.playing)pause();if(!playback)seekVideoForDataTime(state.rows[state.index].sec);render();}
+function setIndex(i,playback=false){if(!state.rows.length)return;state.index=clamp(Math.floor(Number(i)||0),0,state.rows.length-1);el('timeNow').textContent=state.rows[state.index].sec.toFixed(2)+' s';updateNavigator();if(!playback&&state.playing)pause();if(!playback)seekVideoForDataTime(state.rows[state.index].sec);render();}
 function calibrate(){if(!state.rows.length)return;const r=state.rows[state.index];if(!Number.isFinite(r.gyroHead)&&!Number.isFinite(r.headWorld)){el('uiError').textContent='No valid head orientation in this row.';el('uiError').hidden=false;return;}el('uiError').hidden=true;pause();state.baseline=state.index;state.confirmed=true;el('baselineNote').textContent='✓ Baseline · row '+(state.baseline+1).toLocaleString();render();}
 function maybeStartVideo(target){if(!state.videoReady||!state.playing||target<0||target>=video.duration){if(state.videoReady&&video.duration<=target)video.pause();return;}if(video.paused){video.currentTime=target;video.playbackRate=state.speed;video.play().catch(err=>setVideoStatus('Video playback unavailable: '+err.message,true));}}
 function play(){if(!state.rows.length)return;if(state.playing){pause();return;}if(state.index===state.rows.length-1)setIndex(state.baseline);state.playing=true;el('play').textContent='❚❚ Pause';el('play').classList.add('is-paused');state.epoch=performance.now();state.startS=state.rows[state.index].sec;let t0=state.startS+videoOffset();if(state.videoReady&&t0>=0&&t0<video.duration){seekVideoForDataTime(state.startS);maybeStartVideo(t0);}const tick=now=>{if(!state.playing)return;let dataT=state.startS+(now-state.epoch)/1000*state.speed,target=dataT+videoOffset();if(state.videoReady){maybeStartVideo(target);if(target>=0&&target<video.duration&&!video.paused&&Math.abs(target-video.currentTime)>.10)video.currentTime=clamp(target,0,video.duration);if(target>=video.duration)video.pause();updateVideoClock();}setIndex(findDataIndex(dataT),true);if(state.index===state.rows.length-1){pause();return;}state.raf=requestAnimationFrame(tick);};state.raf=requestAnimationFrame(tick);}
@@ -550,15 +776,50 @@ function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[
  const b=state.rows[state.baseline];
  const fusedHead=Number.isFinite(r.headUnwrap)&&Number.isFinite(b.headUnwrap)?r.headUnwrap-b.headUnwrap:NaN;
  const rawHead=Number.isFinite(r.gyroHeadUnwrap)&&Number.isFinite(b.gyroHeadUnwrap)?r.gyroHeadUnwrap-b.gyroHeadUnwrap:NaN;
- el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2):'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2):'—';const verg=vergenceForRow(r);el('vergenceValue').textContent=fmtMeters(verg.meters);el('vergenceCaption').textContent=verg.reason;const pill=el('status');pill.textContent=state.confirmed?'Calibrated · row '+(state.baseline+1):'Provisional baseline';pill.className=state.confirmed?'pill cal':'pill prov';drawScene();drawChart();}
+ el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2):'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2):'—';const verg=vergenceForRow(r),cal=calibratedDistanceForRow(r);
+ if(state.calibration.fit){
+  el('vergenceValue').textContent=cal.meters===Infinity?'>3 m':fmtMeters(cal.meters);
+  el('vergenceCaption').textContent='Calibrated · raw '+fmtMeters(verg.meters)+' · '+cal.reason;
+ }else{el('vergenceValue').textContent=fmtMeters(verg.meters);el('vergenceCaption').textContent=verg.reason+' · raw IPD '+Math.round(getIpdMeters()*1000)+' mm';}
+ const ai=nearestAiDepth(r.ts);
+ el('aiDepthValue').textContent=ai?(Number.isFinite(ai.meters)?fmtMeters(ai.meters):(Number.isFinite(ai.relative)?ai.relative.toFixed(0)+' rel.':'—')):'—';
+ el('aiDepthCaption').textContent=ai?(Number.isFinite(ai.meters)?'Metric DA3 · scene-video estimate':'Relative depth only · not meters'):'No matched scene frame (±100 ms)';
+ const pill=el('status');pill.textContent=state.confirmed?'Calibrated · row '+(state.baseline+1):'Provisional baseline';pill.className=state.confirmed?'pill cal':'pill prov';drawScene();drawChart();}
 function quoteCSV(value){const str=String(value??'');return /[,"\r\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str;}
-function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]', 'vergence angle [deg]', 'calibrated vergence distance [m]', 'DA3 scene depth [m]', 'DA3 relative inverse depth']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'', Number.isFinite(binocularAngleDeg(r))?binocularAngleDeg(r).toFixed(6):'', Number.isFinite(calibratedDistanceForRow(r).meters)?calibratedDistanceForRow(r).meters.toFixed(6):'',Number.isFinite(nearestAiDepth(r.ts)?.meters)?nearestAiDepth(r.ts).meters.toFixed(6):'', Number.isFinite(nearestAiDepth(r.ts)?.relative)?nearestAiDepth(r.ts).relative:'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
 // Upload each source independently, rebuild when all three CSVs are available.
 for(const [kind,inputId,nameId] of [['eye','eyeFile','eyeFileName'],['imu','imuFile','imuFileName'],['fix','fixFile','fixFileName']]){
  el(inputId).addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{state.sources[kind]={text:await file.text(),name:file.name};el(nameId).textContent=file.name;el(inputId).closest('.upload-slot').classList.add('loaded');rebuild();}catch(err){el('uiError').textContent='Could not read '+file.name+': '+err.message;el('uiError').hidden=false;}});
 }
+el('aiDepthFile').addEventListener('change',async event=>{
+ const file=event.target.files?.[0];if(!file)return;
+ try{
+  const parsed=parseAiDepthCSV(await file.text());
+  state.aiDepthRows=parsed;state.aiDepthName=file.name;
+  el('aiDepthFileName').textContent=file.name;
+  el('aiDepthFile').closest('.upload-slot').classList.add('loaded');
+  el('aiDepthMetric').hidden=false;
+  document.querySelector('.metric-row-primary').classList.add('has-ai-depth');
+  updateAiDepthStatus();render();
+ }catch(error){el('aiDepthStatus').textContent='Could not read DA3 file: '+error.message;el('aiDepthStatus').classList.add('error');}
+});
 el('exportCsv').addEventListener('click',exportAlignedCSV);el('ipdMm').addEventListener('input',render);el('eyeThreshold').addEventListener('change',()=>{if(state.sources.eye&&state.sources.imu&&state.sources.fix)rebuild();});
-el('scrub').addEventListener('input',e=>setIndex(e.target.value));el('rowNumber').addEventListener('change',e=>setIndex(Number(e.target.value)-1));el('calibrate').addEventListener('click',calibrate);el('play').addEventListener('click',play);el('step').addEventListener('click',()=>setIndex(state.index+1));el('toBaseline').addEventListener('click',()=>setIndex(state.baseline));el('orientationMode').addEventListener('change',()=>{pause();render();});
+el('navByRow').addEventListener('click',()=>setNavMode('row'));
+el('navByFix').addEventListener('click',()=>setNavMode('fix'));
+el('scrub').addEventListener('input',e=>state.navMode==='fix'?useFixationOrdinal(Number(e.target.value)):setIndex(e.target.value));
+el('rowNumber').addEventListener('change',e=>{
+ if(state.navMode==='fix'){
+  const g=state.fixations.find(g=>g.id===String(e.target.value).trim());
+  if(g)useFixationOrdinal(g.ordinal);
+  else{el('navContext').textContent='Fixation ID not found';el('rowNumber').value=state.fixations[closestFixationOrdinal(state.index)]?.id??'';}
+ }else setIndex(Number(e.target.value)-1);
+});
+el('calibrate').addEventListener('click',calibrate);el('play').addEventListener('click',play);
+el('prev').addEventListener('click',()=>changeNav(-1));el('step').addEventListener('click',()=>changeNav(1));
+el('toBaseline').addEventListener('click',()=>setIndex(state.baseline));
+el('orientationMode').addEventListener('change',()=>{pause();render();});
+for(let i=0;i<3;i++)el('calCapture'+i).addEventListener('click',()=>captureCalibrationPoint(i));
+el('calFit').addEventListener('click',fitVergenceCalibration);el('calClear').addEventListener('click',()=>clearVergenceCalibration());
 for(const btn of document.querySelectorAll('[data-speed]'))btn.addEventListener('click',()=>{if(state.playing)pause();state.speed=Number(btn.dataset.speed);video.playbackRate=state.speed;el('playSpeedLabel').textContent=state.speed+'×';document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===btn));});
 el('guides').addEventListener('change',render);
 function pointToIndex(event){const rect=over.getBoundingClientRect();return clamp(Math.round((event.clientX-rect.left-8)/(rect.width-16)*(state.rows.length-1)),0,state.rows.length-1);}let dragging=false;over.addEventListener('pointerdown',e=>{if(!state.rows.length)return;dragging=true;over.setPointerCapture(e.pointerId);setIndex(pointToIndex(e));});over.addEventListener('pointermove',e=>{if(dragging)setIndex(pointToIndex(e));});over.addEventListener('pointerup',()=>dragging=false);over.addEventListener('pointercancel',()=>dragging=false);
