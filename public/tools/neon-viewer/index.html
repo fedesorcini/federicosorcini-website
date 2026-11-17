@@ -319,6 +319,22 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 .gaze-marker-state{font-size:11px;line-height:1.5;color:#67747D}
 .gaze-marker-state.warn{color:#A15B3A}
 .gaze-marker-state[hidden]{display:none}
+
+/* v19: folder-first import; individual file controls retained as a fallback. */
+.folder-picker{display:block;position:relative;overflow:hidden;border-radius:7px;background:#709C82;color:#102F23;border:1px solid #b8d7c4;padding:14px 12px;cursor:pointer;text-align:center;font-size:15px;font-weight:800}
+.folder-picker:hover{background:#88B49A}
+.folder-picker input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.folder-picker small{display:block;font-size:11px;opacity:.8;margin-top:3px;font-weight:500}
+.folder-message{margin-top:8px;color:#E8F1EC;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
+.folder-message.error{color:#FFDBCD}
+.folder-message[hidden]{display:none}
+.folder-recording-chooser{margin-top:9px}
+.folder-recording-chooser[hidden]{display:none}
+.folder-recording-chooser label{display:block;font-size:12px;margin-bottom:5px}
+.folder-recording-chooser select{width:100%;padding:8px;background:#fff;color:#324C63;border-radius:5px}
+.manual-import{margin-top:12px;border-top:1px solid rgba(240,232,216,.22);padding-top:10px}
+.manual-import summary{cursor:pointer;color:var(--beige);font-size:12px;font-weight:700;list-style:revert;margin-bottom:10px}
+.manual-import:not([open]) summary{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -339,6 +355,10 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 </section>
 <section class="card import-card">
   <div class="section-title">Files</div>
+  <label class="folder-picker" for="folderFile">▣ Select recording folder<small>Automatically find eye, IMU, fixation, gaze and video files</small><input id="folderFile" type="file" webkitdirectory directory multiple aria-label="Select Neon recording folder" /></label>
+  <div id="folderStatus" class="folder-message" role="status" aria-live="polite">Choose the folder containing the Neon exports.</div>
+  <div id="folderRecordingChooser" class="folder-recording-chooser" hidden><label for="folderRecordingSelect">Select recording</label><select id="folderRecordingSelect" class="mode-select"></select></div>
+  <details class="manual-import"><summary>Upload files individually (fallback)</summary>
   <div class="input-stack">
     <label class="upload-slot"><span><b>1.</b> Eye states <small id="eyeFileName">Choose 3d_eye_states.csv</small></span><input id="eyeFile" type="file" accept=".csv,text/csv" aria-label="Upload 3D eye states CSV" /></label>
     <label class="upload-slot"><span><b>2.</b> IMU <small id="imuFileName">Choose imu.csv</small></span><input id="imuFile" type="file" accept=".csv,text/csv" aria-label="Upload IMU CSV" /></label>
@@ -346,7 +366,8 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <label class="upload-slot"><span><b>4.</b> Video <small id="videoFileName">Choose video file</small></span><input id="videoFile" type="file" accept="video/*,.mov,.mp4,.webm" aria-label="Upload recording video" /></label>
     <label class="upload-slot"><span><b>5.</b> Gaze <small id="gazeFileName">Optional · choose gaze.csv</small></span><input id="gazeFile" type="file" accept=".csv,text/csv" aria-label="Upload Pupil Labs Neon gaze CSV" /></label>
   </div>
-  <div class="file-info"><strong id="filename">Select the three CSV files</strong><div class="file-meta" id="fileStats">Video can be loaded before or after the CSVs</div></div>
+  </details>
+  <div class="file-info"><strong id="filename">Select a recording folder</strong><div class="file-meta" id="fileStats">All files are processed locally in your browser.</div></div>
   <button class="control export" type="button" id="exportCsv" disabled>↓ Export aligned CSV</button>
   <div id="uiError" class="ui-error" hidden></div>
 </section>
@@ -866,6 +887,125 @@ function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[
  const pill=el('status');pill.textContent=state.confirmed?'Calibrated · row '+(state.baseline+1):'Provisional baseline';pill.className=state.confirmed?'pill cal':'pill prov';drawScene();drawChart();}
 function quoteCSV(value){const str=String(value??'');return /[,"\r\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str;}
 function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]', 'vergence angle [deg]', 'calibrated vergence distance [m]', 'DA3 scene depth [m]', 'DA3 relative inverse depth']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'', Number.isFinite(binocularAngleDeg(r))?binocularAngleDeg(r).toFixed(6):'', Number.isFinite(calibratedDistanceForRow(r).meters)?calibratedDistanceForRow(r).meters.toFixed(6):'',Number.isFinite(nearestAiDepth(r.ts)?.meters)?nearestAiDepth(r.ts).meters.toFixed(6):'', Number.isFinite(nearestAiDepth(r.ts)?.relative)?nearestAiDepth(r.ts).relative:'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+// Folder imports are selected by the browser; all files stay on the user's machine.
+// Prefer one matching CSV triplet from a single directory to avoid accidentally
+// mixing recordings from nested export folders.
+let folderGroups=[];
+let folderImportVersion=0;
+function folderPath(file){return (file.webkitRelativePath||file.name).replace(/\\/g,'/');}
+function folderEntry(file){const path=folderPath(file);return {file,path,dir:path.includes('/')?path.slice(0,path.lastIndexOf('/')):'',name:file.name.toLowerCase()};}
+function findRecordingGroups(files){
+ const entries=Array.from(files).map(folderEntry);
+ const byDir=new Map();
+ for(const e of entries){if(!byDir.has(e.dir))byDir.set(e.dir,[]);byDir.get(e.dir).push(e);}
+ const result=[];
+ for(const [dir,items] of byDir){
+  const find=n=>items.find(e=>e.name===n);
+  const eye=find('3d_eye_states.csv'),imu=find('imu.csv'),fix=find('fixations.csv');
+  if(!eye||!imu||!fix)continue;
+  const local=entries.filter(e=>e.dir===dir||e.dir.startsWith(dir+'/'));
+  const gaze=local.find(e=>e.name==='gaze.csv');
+  const depth=local.find(e=>e.name==='gaze_depth_output.csv');
+  const clips=local.filter(e=>/\.(mp4|mov|webm|m4v)$/i.test(e.name)&&!/(gaze_depth|undistort|heatmap|audio)/i.test(e.name));
+  function segmentBounds(entry){const m=entry.name.match(/_(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\.(mp4|mov|webm)$/i);return m?{start:Number(m[1]),end:Number(m[2])}:null;}
+  clips.sort((a,b)=>{
+    const sa=segmentBounds(a),sb=segmentBounds(b);
+    // Prefer original scene segments over random unrelated MP4s.
+    const rank=x=>/scene|world/.test(x.name)?0:segmentBounds(x)?1:2;
+    if(rank(a)!==rank(b))return rank(a)-rank(b);
+    if(sa&&sb){ // If one video contains the whole recording, prefer it; otherwise earliest segment.
+      const da=sa.end-sa.start,db=sb.end-sb.start;
+      if(Math.max(da,db)>Math.min(da,db)*2&&Math.max(da,db)>120)return db-da;
+      return sa.start-sb.start;
+    }
+    return a.name.localeCompare(b.name);
+  });
+  result.push({dir,eye,imu,fix,gaze,depth,video:clips[0]||null,clipCount:clips.length});
+ }
+ return result.sort((a,b)=>a.dir.localeCompare(b.dir));
+}
+function folderNotice(message,error=false){const node=el('folderStatus');node.textContent=message;node.classList.toggle('error',error);}
+function clearLocalVideo(){
+ pause();state.videoReady=false;
+ if(state.videoURL)URL.revokeObjectURL(state.videoURL);
+ state.videoURL=null;video.removeAttribute('src');video.load();
+ el('videoPlaceholder').hidden=false;el('videoIndicator').textContent='No video';
+ el('videoScrub').disabled=true;el('matchVideo').disabled=true;
+ el('videoEnd').textContent='—';el('videoNow').textContent='0:00.00';
+ el('videoFileName').textContent='Choose video file';
+ el('videoFile').closest('.upload-slot').classList.remove('loaded');
+ setVideoStatus('');drawGazeOverlay();
+}
+function attachVideoFile(file){
+ if(!file){clearLocalVideo();return;}
+ pause();state.videoReady=false;drawGazeOverlay();
+ if(state.videoURL)URL.revokeObjectURL(state.videoURL);
+ state.videoURL=URL.createObjectURL(file);
+ video.src=state.videoURL;video.muted=!el('videoSound').checked;
+ el('videoFileName').textContent=file.name;
+ el('videoFile').closest('.upload-slot').classList.add('loaded');
+ el('videoIndicator').textContent='Loading video';
+ el('videoPlaceholder').hidden=true;
+ setVideoStatus('Loading '+file.name+' …');video.load();
+}
+async function loadRecordingGroup(group){
+ const token=++folderImportVersion;
+ folderNotice('Reading '+group.dir+' …');
+ // Reading the large raw IMU CSV can take a few seconds; rebuild once only.
+ let texts;
+ try{texts=await Promise.all([group.eye.file.text(),group.imu.file.text(),group.fix.file.text(),group.gaze?.file.text()??Promise.resolve(null),group.depth?.file.text()??Promise.resolve(null)]);}
+ catch(err){if(token===folderImportVersion)folderNotice('Cannot read folder: '+err.message,true);return;}
+ if(token!==folderImportVersion)return;
+ pause();
+ for(const [kind,fileIndex,nameId,inputId] of [['eye',0,'eyeFileName','eyeFile'],['imu',1,'imuFileName','imuFile'],['fix',2,'fixFileName','fixFile']]){
+  const entry=group[kind];state.sources[kind]={name:entry.file.name,text:texts[fileIndex]};
+  el(nameId).textContent=entry.file.name;el(inputId).closest('.upload-slot').classList.add('loaded');
+ }
+ // Never retain the prior recording's optional data when it is absent from this folder.
+ state.gazeRows=[];state.gazeRecordingId=null;state.gazeName=null;
+ el('gazeFileName').textContent='Optional · choose gaze.csv';el('gazeFile').closest('.upload-slot').classList.remove('loaded');
+ let gazeWarning='';
+ if(group.gaze){try{const parsed=parseGazeCSV(texts[3]);state.gazeRows=parsed.rows;state.gazeRecordingId=parsed.recordingId;state.gazeName=group.gaze.file.name;el('gazeFileName').textContent=group.gaze.file.name;el('gazeFile').closest('.upload-slot').classList.add('loaded');}
+ catch(e){gazeWarning=' Gaze file error: '+e.message;}}
+ state.aiDepthRows=[];state.aiDepthName=null;
+ el('aiDepthFileName').textContent='Choose gaze_depth_output.csv';el('aiDepthFile').closest('.upload-slot').classList.remove('loaded');
+ el('aiDepthMetric').hidden=true;document.querySelector('.metric-row-primary').classList.remove('has-ai-depth');
+ if(group.depth){try{state.aiDepthRows=parseAiDepthCSV(texts[4]);state.aiDepthName=group.depth.file.name;el('aiDepthFileName').textContent=group.depth.file.name;el('aiDepthFile').closest('.upload-slot').classList.add('loaded');el('aiDepthMetric').hidden=false;document.querySelector('.metric-row-primary').classList.add('has-ai-depth');}
+ catch(e){gazeWarning+=' DA3 error: '+e.message;}}
+ // A new folder is a new recording: do not carry over its previous video offset.
+ el('videoOffset').value='0';state.videoOffset=0;
+ attachVideoFile(group.video?.file||null);
+ rebuild();
+ updateGazeStatus();updateAiDepthStatus();drawGazeOverlay();
+ const found=['eye states','IMU','fixations',...(group.gaze?['gaze']:[]),...(group.video?['video']:[]),...(group.depth?['DA3 depth']:[])];
+ let message='Loaded '+found.join(', ')+'.';
+ if(!group.video)message+=' No scene video found; you can add it manually.';
+ if(!group.gaze)message+=' No gaze.csv found; gaze marker is optional.';
+ if(group.clipCount>1)message+=' Found '+group.clipCount+' video clips: loaded only the first/primary clip. Use a combined video for full-recording playback.';
+ folderNotice(message+gazeWarning,!!gazeWarning);
+}
+el('folderFile').addEventListener('change',event=>{
+ const files=event.target.files;
+ if(!files?.length)return;
+ const groups=findRecordingGroups(files);
+ folderGroups=groups;
+ const chooser=el('folderRecordingChooser'),select=el('folderRecordingSelect');
+ select.replaceChildren();
+ if(!groups.length){chooser.hidden=true;folderNotice('Could not find 3d_eye_states.csv, imu.csv and fixations.csv together in one folder. Expand “Upload files individually” to choose them manually.',true);event.target.value='';return;}
+ if(groups.length===1){chooser.hidden=true;loadRecordingGroup(groups[0]);}
+ else{
+  chooser.hidden=false;
+  select.appendChild(new Option('Choose a recording…',''));
+  for(let i=0;i<groups.length;i++)select.appendChild(new Option(groups[i].dir||'Selected folder',String(i)));
+  folderNotice('Found '+groups.length+' recordings. Choose which one to load.');
+ }
+ event.target.value='';
+});
+el('folderRecordingSelect').addEventListener('change',e=>{
+ if(e.target.value==='')return;
+ const group=folderGroups[Number(e.target.value)];if(group)loadRecordingGroup(group);
+});
+
 // Upload each source independently, rebuild when all three CSVs are available.
 for(const [kind,inputId,nameId] of [['eye','eyeFile','eyeFileName'],['imu','imuFile','imuFileName'],['fix','fixFile','fixFileName']]){
  el(inputId).addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{state.sources[kind]={text:await file.text(),name:file.name};el(nameId).textContent=file.name;el(inputId).closest('.upload-slot').classList.add('loaded');rebuild();}catch(err){el('uiError').textContent='Could not read '+file.name+': '+err.message;el('uiError').hidden=false;}});
@@ -914,7 +1054,7 @@ el('guides').addEventListener('change',render);
 function pointToIndex(event){const rect=over.getBoundingClientRect();return clamp(Math.round((event.clientX-rect.left-8)/(rect.width-16)*(state.rows.length-1)),0,state.rows.length-1);}let dragging=false;over.addEventListener('pointerdown',e=>{if(!state.rows.length)return;dragging=true;over.setPointerCapture(e.pointerId);setIndex(pointToIndex(e));});over.addEventListener('pointermove',e=>{if(dragging)setIndex(pointToIndex(e));});over.addEventListener('pointerup',()=>dragging=false);over.addEventListener('pointercancel',()=>dragging=false);
 document.addEventListener('keydown',e=>{if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();play();}else if(e.code==='ArrowRight'&&state.rows.length){e.preventDefault();setIndex(state.index+1);}else if(e.code==='ArrowLeft'&&state.rows.length){e.preventDefault();setIndex(state.index-1);}});
 window.addEventListener('resize',resizeAll);if(typeof ResizeObserver!=='undefined')new ResizeObserver(drawGazeOverlay).observe(gazeCanvas.parentElement);
-el('videoFile').addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;pause();state.videoReady=false;drawGazeOverlay();if(state.videoURL)URL.revokeObjectURL(state.videoURL);state.videoURL=URL.createObjectURL(file);video.src=state.videoURL;video.muted=!el('videoSound').checked;el('videoFileName').textContent=file.name;el('videoFile').closest('.upload-slot').classList.add('loaded');el('videoIndicator').textContent='Loading video';el('videoPlaceholder').hidden=true;setVideoStatus('Loading '+file.name+' …');video.load();});
+el('videoFile').addEventListener('change',e=>{const file=e.target.files?.[0];if(file)attachVideoFile(file);});
 video.addEventListener('loadedmetadata',()=>{state.videoReady=true;const duration=video.duration;el('videoIndicator').textContent='Ready';el('videoScrub').disabled=false;el('videoScrub').max=Number.isFinite(duration)?duration:100000;el('videoEnd').textContent=Number.isFinite(duration)?clockFmt(duration):'Unknown duration';el('matchVideo').disabled=!state.rows.length;seekVideoForDataTime(state.rows[state.index]?.sec||0);setVideoStatus('');updateGazeStatus();resizeAll();});
 video.addEventListener('error',()=>{if(!video.src)return;state.videoReady=false;el('videoIndicator').textContent='Video error';el('videoPlaceholder').hidden=false;setVideoStatus('Browser could not decode this video. Try MP4 (H.264) or WebM.',true);updateGazeStatus();drawGazeOverlay();});
 video.addEventListener('timeupdate',updateVideoClock);video.addEventListener('seeked',drawGazeOverlay);video.addEventListener('loadeddata',drawGazeOverlay);el('gazeVisible').addEventListener('change',drawGazeOverlay);el('videoScrub').addEventListener('input',e=>{if(!state.videoReady)return;pause();video.currentTime=Number(e.target.value);updateVideoClock();});
