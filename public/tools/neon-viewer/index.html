@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
-<!-- Version 20: compact readouts, red video gaze dot, head-only overhead view -->
+<!-- Version 21: zoomed-out overhead view, hollow red video gaze marker -->
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
@@ -733,9 +733,9 @@ function drawGazeOverlay(){
  if(point.x<0||point.y<0||point.x>=iw||point.y>=ih)return;
  const scale=Math.min(w/iw,h/ih),left=(w-iw*scale)/2,top=(h-ih*scale)/2;
  const px=left+point.x*scale,py=top+point.y*scale;
- // Distinct from the left/right eye arrows; visible over bright and dark video.
- gazeCtx.beginPath();gazeCtx.arc(px,py,9,0,Math.PI*2);gazeCtx.fillStyle='#E13C35';gazeCtx.fill();
- gazeCtx.lineWidth=2.5;gazeCtx.strokeStyle='#FFFFFF';gazeCtx.stroke();
+ // Hollow red gaze marker for clearer scene visibility.
+ gazeCtx.beginPath();gazeCtx.arc(px,py,9,0,Math.PI*2);
+ gazeCtx.lineWidth=3;gazeCtx.strokeStyle='#D9382E';gazeCtx.stroke();
 }
 function validateRecording(tables){const ids=[];for(const k of ['eye','imu','fix']){const t=tables[k],ri=t.index('recording id'),si=t.index('section id');if(ri<0||si<0)continue;const first=t.rows[0];ids.push([k,valueAt(first,ri),valueAt(first,si)]);}if(ids.length>1){for(const other of ids.slice(1)){if(other[1]!==ids[0][1]||other[2]!==ids[0][2])throw Error('The exports are from different recordings or sections. Please upload matching files.');}}}
 function buildMerged(){const table={};for(const kind of ['eye','imu','fix']){table[kind]=parseTable(state.sources[kind].text,kind==='fix'?['start timestamp [ns]','end timestamp [ns]','fixation id']:['timestamp [ns]']);}
@@ -803,13 +803,13 @@ function resizeAll(){[sw,sh]=fit(scene,g);[ow,oh]=fit(over,og);render();drawGaze
 function stroke(ctx,x1,y1,x2,y2,color,width=1,dash=[]){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);}
 function arrow(ctx,x1,y1,x2,y2,color,width=3){stroke(ctx,x1,y1,x2,y2,color,width);const a=Math.atan2(y2-y1,x2-x1),n=8;ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-n*Math.cos(a-.5),y2-n*Math.sin(a-.5));ctx.lineTo(x2-n*Math.cos(a+.5),y2-n*Math.sin(a+.5));ctx.closePath();ctx.fillStyle=color;ctx.fill();}
 function txt(ctx,t,x,y,size,color,align='center',weight=500){ctx.font=weight+' '+size+'px system-ui';ctx.textBaseline='middle';ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(t,x,y);}
-function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
+function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.56;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
  if(el('guides').checked){for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD,L=Math.min(220,w*.39,h*.43);stroke(g,cx,cy,cx+Math.sin(a)*L,cy-Math.cos(a)*L,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(L+11),cy-Math.cos(a)*(L+11),10,'#7C898F');}for(const r of [100,165,225]){g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,Math.PI,Math.PI*2);g.stroke();}}
  stroke(g,cx,0,cx,cy,'#9DAEA6',1.1,[6,7]);txt(g,'BASELINE HEAD / 0°',cx,18,10,'#324C63','center',800);
- g.save();g.translate(cx,cy);const scale=Math.min(w/340,h/320,1.65);g.scale(scale,scale);
+ g.save();g.translate(cx,cy);const scale=Math.min(w/460,h/420,1.18);g.scale(scale,scale);
  const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
  g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
- g.beginPath();g.ellipse(0,0,54,62,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.8;g.stroke();g.beginPath();g.ellipse(-55,5,8,13,0,0,Math.PI*2);g.ellipse(55,5,8,13,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,12,47,43,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-12,-55);g.lineTo(0,-78);g.lineTo(12,-55);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
+ g.beginPath();g.ellipse(0,0,48,56,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.6;g.stroke();g.beginPath();g.ellipse(-49,5,7,12,0,0,Math.PI*2);g.ellipse(49,5,7,12,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,11,42,38,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-11,-50);g.lineTo(0,-70);g.lineTo(11,-50);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
  // Each eye ray starts at its pupil and ends at the visible binocular intersection,
  // or at its own viewport edge if the rays are parallel, diverging, or meet off-screen.
  // This is a 2D schematic intersection, not an estimate of real-world gaze depth.
@@ -817,7 +817,7 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearR
  const cosHead=Math.cos(headRad),sinHead=Math.sin(headRad);
  const eyes=[['left',-23,'#B67434'],['right',23,'#8666A6']].map(([prefix,x,color])=>{
    const open=Number.isFinite(a[prefix]);
-   const local={x,y:-27};
+   const local={x,y:-24};
    const origin={x:cx+scale*(local.x*cosHead-local.y*sinHead),y:cy+scale*(local.x*sinHead+local.y*cosHead)};
    const worldAngle=headRad+(open?a[prefix]*RAD:0);
    const dir={x:Math.sin(worldAngle),y:-Math.cos(worldAngle)};
@@ -825,7 +825,7 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearR
  });
  // Draw eye sockets first and keep pupils above the extended direction lines.
  for(const eye of eyes){
-   g.beginPath();g.ellipse(eye.x,-24,12,eye.open?9:3,0,0,Math.PI*2);
+   g.beginPath();g.ellipse(eye.x,-22,11,eye.open?8:3,0,0,Math.PI*2);
    g.fillStyle=eye.open?'#fbf5eb':'#b49b8c';g.fill();
    g.strokeStyle=eye.open?eye.color:'#947c70';g.lineWidth=2;g.stroke();
  }
@@ -866,7 +866,7 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.54;g.clearR
  }
  for(const eye of eyes){
    if(!eye.open)continue;
-   g.beginPath();g.arc(eye.local.x,eye.local.y,5,0,2*Math.PI);
+   g.beginPath();g.arc(eye.local.x,eye.local.y,4.5,0,2*Math.PI);
    g.fillStyle=eye.prefix==='left'?'#725437':'#6d4d86';g.fill();
    g.beginPath();g.arc(eye.local.x,eye.local.y,2.6,0,2*Math.PI);
    g.fillStyle='#2c221b';g.fill();
