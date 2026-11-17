@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
-<!-- Version 21: zoomed-out overhead view, hollow red video gaze marker -->
+<!-- Version 22: farther zoom-out, lower head position, full 0.5 m distance rings -->
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
@@ -803,10 +803,15 @@ function resizeAll(){[sw,sh]=fit(scene,g);[ow,oh]=fit(over,og);render();drawGaze
 function stroke(ctx,x1,y1,x2,y2,color,width=1,dash=[]){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);}
 function arrow(ctx,x1,y1,x2,y2,color,width=3){stroke(ctx,x1,y1,x2,y2,color,width);const a=Math.atan2(y2-y1,x2-x1),n=8;ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-n*Math.cos(a-.5),y2-n*Math.sin(a-.5));ctx.lineTo(x2-n*Math.cos(a+.5),y2-n*Math.sin(a+.5));ctx.closePath();ctx.fillStyle=color;ctx.fill();}
 function txt(ctx,t,x,y,size,color,align='center',weight=500){ctx.font=weight+' '+size+'px system-ui';ctx.textBaseline='middle';ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(t,x,y);}
-function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.56;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
- if(el('guides').checked){for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD,L=Math.min(220,w*.39,h*.43);stroke(g,cx,cy,cx+Math.sin(a)*L,cy-Math.cos(a)*L,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(L+11),cy-Math.cos(a)*(L+11),10,'#7C898F');}for(const r of [100,165,225]){g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,Math.PI,Math.PI*2);g.stroke();}}
+function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.68;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
+ if(el('guides').checked){const radialL=Math.min(295,w*.45,h*.62);for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD;stroke(g,cx,cy,cx+Math.sin(a)*radialL,cy-Math.cos(a)*radialL,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(radialL+12),cy-Math.cos(a)*(radialL+12),10,'#7C898F');}
+  const maxR=Math.max(70,Math.min(w*.46,h*.60,cy-26));
+  const step=maxR/6;
+  for(let n=1;n<=6;n++){const r=step*n;g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,0,Math.PI*2);g.stroke();
+    const labelY=cy-r;stroke(g,cx-7,labelY,cx+7,labelY,'#B8C2C1',1.2);txt(g,(n*0.5).toFixed(1)+' m',cx+28,labelY,10,'#6D7C81','left',700);}
+ }
  stroke(g,cx,0,cx,cy,'#9DAEA6',1.1,[6,7]);txt(g,'BASELINE HEAD / 0°',cx,18,10,'#324C63','center',800);
- g.save();g.translate(cx,cy);const scale=Math.min(w/460,h/420,1.18);g.scale(scale,scale);
+ g.save();g.translate(cx,cy);const scale=Math.min(w/560,h/560,0.92);g.scale(scale,scale);
  const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
  g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
  g.beginPath();g.ellipse(0,0,48,56,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.6;g.stroke();g.beginPath();g.ellipse(-49,5,7,12,0,0,Math.PI*2);g.ellipse(49,5,7,12,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,11,42,38,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-11,-50);g.lineTo(0,-70);g.lineTo(11,-50);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
