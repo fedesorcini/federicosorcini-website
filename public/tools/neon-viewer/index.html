@@ -8,7 +8,7 @@
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
-<meta property="og:description" content="A browser-based tool for exploring synchronized eye, head, scene-video and optional imported AI depth recordings." />
+<meta property="og:description" content="A browser-based tool for exploring synchronized eye, head, scene-video and spatial calibration." />
 <meta property="og:type" content="website" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -275,19 +275,6 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   .metric-row .label{font-size:10px}
 }
 
-/* Optional DA3/Neon Player depth-estimation import; the model is NOT run by this page. */
-.ai-depth-card .section-title{margin-bottom:9px}
-.ai-depth-card .upload-slot{min-height:58px}
-.ai-depth-help{color:rgba(255,255,255,.82);font-size:11px;line-height:1.45;margin:10px 0 0}
-.ai-depth-help a{color:#F0E8D8;text-underline-offset:2px}
-.ai-depth-state{margin-top:10px;color:#E5EDDD;font-size:11px;overflow-wrap:anywhere}
-.ai-depth-state.error{color:#FFD9C5}
-.metric-row-primary.has-ai-depth{grid-template-columns:repeat(4,minmax(0,1fr))}
-.metric-row-primary .readout[hidden]{display:none}
-.value.ai{color:#4E718A}
-@media(max-width:1020px){.metric-row-primary.has-ai-depth{display:flex}}
-
-
 /* v17: fixation navigation and 3-point calibration */
 .nav-mode{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:3px 0 13px}
 .nav-mode button{border:1px solid rgba(240,232,216,.55);color:var(--beige);background:transparent;border-radius:5px;padding:7px 5px;font-size:12px;font-weight:700}
@@ -344,7 +331,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 
 /* Version 26: user-defined 3D objects, recognized using visual gaze and vergence. */
 .metric-row-primary{grid-template-columns:repeat(4,minmax(0,1fr))}
-.metric-row-primary.has-ai-depth{grid-template-columns:repeat(5,minmax(0,1fr))}
+
 .metric-row .value.object-readout{font-size:23px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#426E65}
 .object-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .object-form .wide{grid-column:1/-1}
@@ -366,7 +353,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 .object-status.error{color:#ffddcf}
 .object-file{display:inline-flex;position:relative;cursor:pointer;border:1px solid rgba(240,232,216,.56);border-radius:5px;color:#f0e8d8;padding:7px 10px;font-size:11px;font-weight:700;margin-top:9px}
 .object-file input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-@media(max-width:1020px){.metric-row-primary,.metric-row-primary.has-ai-depth{display:flex}}
+@media(max-width:1020px){.metric-row-primary{display:flex}}
 
 
 /* Nine-target spatial (horizontal, vertical, and depth) calibration. */
@@ -402,6 +389,30 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 .spatial-actions .wide{grid-column:1/-1;background:#709c82;color:#fff;border-color:#9bc3a9}
 .side,.side>.card,.spatial-cal-card,.spatial-list,.spatial-row,.spatial-identifiers,.spatial-fields,.spatial-row label{min-width:0;max-width:100%}
 .spatial-import-help,.spatial-import-help code{overflow-wrap:anywhere;word-break:break-word}
+
+/* v28 sidebar: semantic, keyboard-accessible collapsible sections */
+.side .sidebar-section {min-width:0;overflow:visible}
+.side .sidebar-section>summary.section-title {
+  list-style:none; display:flex; align-items:center; justify-content:space-between;
+  gap:10px; cursor:pointer; margin:0; font-size:18px; color:var(--beige);
+  line-height:1.25; user-select:none;
+}
+.side .sidebar-section>summary.section-title::-webkit-details-marker{display:none}
+.side .sidebar-section>summary.section-title::after{
+  content:'+'; font-family:Georgia,serif; font-size:24px; font-weight:400;
+  flex-shrink:0; line-height:1; color:#F0E8D8; opacity:.88;
+}
+.side .sidebar-section[open]>summary.section-title::after{content:'−'}
+.side .sidebar-section[open]>summary.section-title{margin-bottom:15px}
+.side .sidebar-section>summary.section-title:focus-visible{outline:2px solid #F0E8D8;outline-offset:5px;border-radius:2px}
+.side .cal-method{border:1px solid rgba(240,232,216,.35);margin:0 0 14px;padding:10px;border-radius:7px;display:grid;gap:9px}
+.side .cal-method legend{font-size:12px;font-weight:700;padding:0 5px;color:rgba(240,232,216,.92)}
+.side .cal-method label{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--beige);line-height:1.3;cursor:pointer}
+.side .cal-method input{accent-color:#709C82;width:16px;height:16px;flex-shrink:0}
+#calThreePanel[hidden],#calNinePanel[hidden]{display:none!important}
+.calibration-card #calNinePanel .spatial-list{margin-top:12px}
+.calibration-card #calNinePanel .spatial-import{margin-top:0}
+
 </style>
 </head>
 <body>
@@ -420,8 +431,8 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="compact-buttons"><button class="control" id="toBaseline" type="button" disabled>↶ Baseline</button><button class="control" id="prev" type="button" disabled>−1 row</button><button class="control" id="step" type="button" disabled>+1 row</button></div>
   <div class="baseline-status" id="baselineNote">Baseline not selected</div>
 </section>
-<section class="card import-card">
-  <div class="section-title">Files</div>
+<details class="card import-card sidebar-section" open>
+  <summary class="section-title">Files</summary>
   <label class="folder-picker" for="folderFile">▣ Select recording folder<small>Automatically find eye, IMU, fixation, gaze, video and timestamp files</small><input id="folderFile" type="file" webkitdirectory directory multiple aria-label="Select Neon recording folder" /></label>
   <div id="folderStatus" class="folder-message" role="status" aria-live="polite">Choose the folder containing the Neon exports.</div>
   <div id="folderRecordingChooser" class="folder-recording-chooser" hidden><label for="folderRecordingSelect">Select recording</label><select id="folderRecordingSelect" class="mode-select"></select></div>
@@ -439,9 +450,15 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="file-info"><strong id="filename">Select a recording folder</strong><div class="file-meta" id="fileStats">All files are processed locally in your browser.</div></div>
   <button class="control export" type="button" id="exportCsv" disabled>↓ Export aligned CSV</button>
   <div id="uiError" class="ui-error" hidden></div>
-</section>
-<section class="card vergence-cal-card">
-  <div class="section-title">Vergence calibration</div>
+</details>
+<details class="card calibration-card sidebar-section" id="calibrationSection">
+  <summary class="section-title">Calibration</summary>
+  <fieldset class="cal-method" aria-label="Calibration method">
+    <legend>Calibration method</legend>
+    <label><input type="radio" name="calibrationMethod" value="three" checked /> 3-point depth</label>
+    <label><input type="radio" name="calibrationMethod" value="nine" /> 9-point spatial</label>
+  </fieldset>
+  <div class="vergence-cal-card" id="calThreePanel">
   <p class="cal-intro">Choose three known viewing distances. Select a fixation or row above, then assign it below.</p>
   <div class="rowlabel"><label for="calCaptureMode">Use measurements from</label></div>
   <select class="mode-select cal-capture-choice" id="calCaptureMode"><option value="fixation">Selected fixation (whole event)</option><option value="frame">Selected frame ±250 ms</option></select>
@@ -450,10 +467,8 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="cal-target"><div class="cal-target-head"><span class="cal-distance">3.0 m</span><button id="calCapture2" class="cal-capture" disabled type="button">Use selected</button></div><div class="cal-target-meta" id="calStatus2">Not assigned</div></div>
   <div class="cal-actions"><button id="calFit" class="cal-fit" disabled type="button">Apply calibration</button><button id="calClear" class="cal-clear" type="button">Reset</button></div>
   <div id="calResult" class="cal-result" aria-live="polite" hidden></div>
-</section>
-
-<details class="card spatial-cal-card">
-  <summary class="section-title">Nine-point spatial calibration</summary>
+  </div>
+  <div class="spatial-cal-card" id="calNinePanel" hidden>
   <p class="cal-intro">Calibrate <strong>horizontal direction, vertical direction, and vergence distance</strong> together from nine known targets. You can capture fixations manually or import a CSV containing each target’s location and fixation ID.</p>
   <div class="spatial-import">
     <label class="spatial-import-button">↑ Import 9 target locations + fixation IDs (CSV)<input id="spatialCsv" type="file" accept=".csv,text/csv" aria-label="Import nine-point calibration CSV" /></label>
@@ -467,9 +482,10 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div id="spatialResult" class="spatial-cal-result" hidden aria-live="polite"></div>
   <div id="spatialLive" class="spatial-live">Load a recording to inspect spatial gaze direction.</div>
   <p class="object-note">The nine-point fit automatically replaces the three-point vergence fit while active. Its corrected depth drives the vergence readout and overhead convergence point. Original optical-axis readings and video gaze pixels remain unchanged. Use the same baseline head position throughout calibration; validate on additional targets.</p>
+  </div>
 </details>
-<section class="card objects-card">
-  <div class="section-title">Objects in the scene</div>
+<details class="card objects-card sidebar-section">
+  <summary class="section-title">Objects in the scene</summary>
   <p class="cal-intro">Coordinates are relative to the head-forward ray at the selected baseline: right (+), up (+), distance from the baseline head position. A match requires the 3D gaze point to lie inside the object's sphere.</p>
   <div class="object-form">
     <label class="object-field wide">Object name<input id="objectName" type="text" maxlength="70" placeholder="e.g. Small monitor" /></label>
@@ -489,15 +505,10 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="object-buttons"><button id="objectExport" class="secondary" type="button">Export object JSON</button><button id="objectClear" class="secondary" type="button">Clear all</button></div>
   <label class="object-file">Import object JSON<input id="objectImport" type="file" accept="application/json,.json" /></label>
   <p class="object-note">Recognition uses synchronized scene gaze when `gaze.csv` and `scene_camera.json` are available, otherwise binocular optical-axis direction. Depth comes from the calibrated (or raw) vergence estimate. A fixed head position is assumed; walking is not tracked.</p>
-</section>
-<section class="card ai-depth-card">
-  <div class="section-title">AI depth estimation <span style="font-size:11px;font-weight:400;opacity:.8">optional</span></div>
-  <label class="upload-slot"><span>Depth Anything V3 results <small id="aiDepthFileName">Choose gaze_depth_output.csv</small></span><input id="aiDepthFile" type="file" accept=".csv,text/csv" aria-label="Upload Depth Anything 3 CSV from Neon Player" /></label>
-  <div id="aiDepthStatus" class="ai-depth-state" aria-live="polite">No depth estimates loaded</div>
-  <p class="ai-depth-help">Run the <a href="https://docs.pupil-labs.com/alpha-lab/depth-estimation/" target="_blank" rel="noopener noreferrer">Pupil Labs DA3 plugin</a> in Neon Player first. Upload its CSV here; select its gaze_depth.mp4 as the video to see the heatmap.</p>
-</section>
-<section class="card settings-card">
-  <div class="section-title">Settings</div>
+</details>
+
+<details class="card settings-card sidebar-section">
+  <summary class="section-title">Settings</summary>
   <div class="rowlabel"><label for="orientationMode">Head orientation</label></div>
   <select id="orientationMode" class="mode-select" aria-label="Head orientation source">
     <option value="quat" selected>Fused IMU orientation (recommended)</option>
@@ -516,7 +527,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <option value="500">500 ms · median</option>
   </select>
   <div class="rowlabel ipd-setting"><label for="ipdMm">Interpupillary distance</label><div><input type="number" id="ipdMm" class="field small" min="40" max="85" step="1" value="64"/> mm</div></div>
-</section>
+</details>
 </aside>
 <div class="maincol">
 <section class="metrics" aria-label="Live tracking measurements">
@@ -525,7 +536,6 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <div class="readout"><div class="label">Fixation ID</div><div class="value violet" id="fixValue">—</div><div class="micro" id="fixCaption">Event membership</div></div>
     <div class="readout"><div class="label">Vergence distance</div><div class="value mint" id="vergenceValue">—</div><div class="micro" id="vergenceCaption">Estimated · IPD 64 mm</div></div>
     <div class="readout"><div class="label">Looking at</div><div class="value object-readout" id="lookingAtValue" title="">—</div></div>
-    <div class="readout" id="aiDepthMetric" hidden><div class="label">AI scene depth · DA3</div><div class="value ai" id="aiDepthValue">—</div><div class="micro" id="aiDepthCaption">Closest scene-video frame</div></div>
   </div>
   <div class="metric-row metric-row-eyes" aria-label="Eye direction and pupil measurements">
     <div class="readout"><div class="label">Left eye direction</div><div class="value gold" id="eyeValue">—</div><div class="micro">Relative to baseline head</div></div>
@@ -766,7 +776,7 @@ function normalizedQ(q){const m=Math.hypot(...q);return Number.isFinite(m)&&m>.5
 function axisValid(row,prefix,threshold){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);const aperture=row[prefix+'Aperture'];return Number.isFinite(mag)&&mag>.2&&mag<2&&(!Number.isFinite(aperture)||aperture>=threshold);}
 function azimuthForEye(q,row,prefix){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);return topDownAzimuth(quaternionRotate(q,sceneDirectionToImu(row[prefix+'X']/mag,row[prefix+'Y']/mag,row[prefix+'Z']/mag)));}
 function unwrapField(rows,src,dst){let prev=NaN,cont=NaN;for(const r of rows){const v=r[src];if(Number.isFinite(v)){cont=Number.isFinite(prev)?cont+wrap180(v-prev):v;prev=v;r[dst]=cont;}else r[dst]=NaN;}}
-const state={worldTiming:null,videoClipStartSec:0,videoFileName:null,syncMode:'unverified',rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null,cameraCalibration:null,objects:[],objectEditIndex:-1,objectMatchIndex:-1,spatialCalibration:{points:Array(9).fill(null),fit:null,previousDepthFit:null,csvReady:false,csvName:null}};
+const state={worldTiming:null,videoClipStartSec:0,videoFileName:null,syncMode:'unverified',rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null,cameraCalibration:null,objects:[],objectEditIndex:-1,objectMatchIndex:-1,spatialCalibration:{points:Array(9).fill(null),fit:null,previousDepthFit:null,csvReady:false,csvName:null}};
 const tickTime=(a,b)=>Number(a-b)/1e9;
 // Video is aligned using world_timestamps.csv, not by assuming that the first
 // eye-state sample occurred at the first video frame. For segmented Neon video,
@@ -819,44 +829,6 @@ function applyAutomaticVideoSync(){
  state.syncMode='auto';
  syncInfo('Synchronized from '+world.count.toLocaleString()+' world timestamps · automatic offset '+(autoOffset>=0?'+':'')+autoOffset.toFixed(3)+' s'+(clipStart>0?' · clip begins at '+clipStart.toFixed(3)+' s':'')+'.');
  if(state.videoReady)seekVideoForDataTime(state.rows[state.index].sec);
-}
-
-// The Neon Player plugin provides one output per scene-camera frame, with original
-// scene timestamps in integer nanoseconds. Match to eye-state timestamps, not
-// video.currentTime or a guessed frame rate. No AI inference runs here.
-function parseAiDepthCSV(content){
- const lines=parseRows(content),headers=lines[0].map(h=>h.toLowerCase().trim());
- const col=name=>headers.indexOf(name),timeCol=col('timestamp'),depthCol=col('depth_meters'),relativeCol=col('relative_inverse_depth');
- if(timeCol<0 || (depthCol<0&&relativeCol<0))throw Error('Expected timestamp and depth_meters or relative_inverse_depth from the Neon Player DA3 plugin.');
- const out=[];
- for(const fields of lines.slice(1)){
-  let ts;try{ts=readTimestamp(fields[timeCol]);}catch(e){continue;}
-  const raw=depthCol>=0?fields[depthCol]:'';
-  const m=raw!==undefined&&raw!==''?Number(raw):NaN;
-  const rs=relativeCol>=0?fields[relativeCol]:'';
-  const relative=rs!==undefined&&rs!==''?Number(rs):NaN;
-  if((Number.isFinite(m)&&m>0)||(Number.isFinite(relative)&&relative>=0))out.push({ts,meters:Number.isFinite(m)&&m>0?m:NaN,relative:Number.isFinite(relative)?relative:NaN});
- }
- if(!out.length)throw Error('No valid depth samples in CSV.');
- out.sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);
- return out;
-}
-function nearestAiDepth(ts){
- const arr=state.aiDepthRows;if(!arr.length||typeof ts!=='bigint')return null;
- let lo=0,hi=arr.length;
- while(lo<hi){const mid=(lo+hi)>>1;if(arr[mid].ts<ts)lo=mid+1;else hi=mid;}
- let candidate=lo<arr.length?arr[lo]:null;
- if(lo>0&&(!candidate||(ts-arr[lo-1].ts)<(candidate.ts-ts)))candidate=arr[lo-1];
- // Prevent a gaze depth from a distant time or another recording being displayed.
- return candidate&&(candidate.ts>ts?candidate.ts-ts:ts-candidate.ts)<=100000000n?candidate:null;
-}
-function updateAiDepthStatus(){
- const node=el('aiDepthStatus');if(!state.aiDepthRows.length){node.textContent='No depth estimates loaded';node.classList.remove('error');return;}
- const eyeCount=state.rows.length;if(!eyeCount){node.textContent=state.aiDepthRows.length.toLocaleString()+' frames loaded · add eye-state CSVs to align';node.classList.remove('error');return;}
- // Sample max 5000 eye rows to estimate time overlap quickly even on large recordings.
- const stride=Math.max(1,Math.floor(eyeCount/5000));let n=0,total=0;
- for(let i=0;i<eyeCount;i+=stride){total++;if(nearestAiDepth(state.rows[i].ts))n++;}
- state.aiMatchedCount=n;node.textContent=state.aiDepthRows.length.toLocaleString()+' DA3 frames · '+Math.round(n/Math.max(total,1)*100)+'% eye-data time coverage (sampled)';node.classList.toggle('error',n===0);
 }
 
 // Optional Neon gaze.csv: coordinates are pixels of the original scene camera image.
@@ -1104,7 +1076,7 @@ async function spatialImportCsv(file){
    el('spatialMeta'+i).textContent=p.name+' · fixation #'+p.fixId+' · awaiting capture';
   });
   state.spatialCalibration.csvReady=imported.every(p=>Boolean(p.fixId));state.spatialCalibration.csvName=file.name;
-  document.querySelector('.spatial-cal-card').open=true;
+  document.querySelector('#calibrationSection').open=true;setCalibrationMode('nine');
   if(state.spatialCalibration.csvReady&&state.rows.length&&state.confirmed)spatialCaptureAll();
   else spatialStatus('Imported '+file.name+' (9 locations). '+(!state.spatialCalibration.csvReady?'Fill in the nine fixation IDs, then use “Capture all fixation IDs + calibrate”.':!state.rows.length?'Load the Neon recording and select its baseline.':'Set the baseline head-forward frame to capture all points automatically.'));
  }catch(e){spatialStatus('CSV import error: '+e.message,true);}
@@ -1393,7 +1365,7 @@ function rebuild(){if(!['eye','imu','fix'].every(k=>state.sources[k]))return;pau
  try{const merged=buildMerged();state.rows=merged.rows;state.fixations=makeFixationIndex(state.rows);state.navMode='row';spatialReset(false,true);clearVergenceCalibration(true);state.tables=merged.tables;state.alignedMeta=merged.stats;state.index=0;state.baseline=state.rows.findIndex(r=>Number.isFinite(r.gyroHead));state.confirmed=false;state.index=state.baseline;
  const n=merged.stats;el('filename').textContent=n.eye.toLocaleString()+' eye-state samples aligned';el('fileStats').textContent=n.matched.toLocaleString()+'/'+n.eye.toLocaleString()+' matched IMU · '+n.fixCount.toLocaleString()+' fixation-labeled · '+n.rightOpen.toLocaleString()+' right-eye open';
  el('scrub').max=state.rows.length-1;el('scrub').disabled=false;el('navByFix').disabled=!state.fixations.length;el('matchVideo').disabled=!state.videoReady;el('rowNumber').max=state.rows.length;el('rowNumber').disabled=false;for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2'])el(id).disabled=false;
- el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);updateAiDepthStatus();updateGazeStatus();applyAutomaticVideoSync();resizeAll();
+ el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);updateGazeStatus();applyAutomaticVideoSync();resizeAll();
  }catch(err){state.rows=[];state.fixations=[];clearVergenceCalibration(true);state.tables=null;state.alignedMeta=null;el('uiError').hidden=false;el('uiError').textContent='Could not align files: '+err.message;el('filename').textContent='Alignment failed';updateGazeStatus();drawGazeOverlay();for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2','navByFix'])el(id).disabled=true;}
 }
 const video=el('video');
@@ -1529,16 +1501,13 @@ function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[
   el('vergenceValue').textContent=cal.meters===Infinity?'Far / ∞':fmtMeters(cal.meters);
   el('vergenceCaption').textContent='Calibrated'+(Number(el('vergSmooth').value)?' · smoothed':'')+' · raw '+fmtMeters(verg.meters);
  }else{el('vergenceValue').textContent=fmtMeters(cal.meters);el('vergenceCaption').textContent=cal.reason+' · raw IPD '+Math.round(getIpdMeters()*1000)+' mm';}
- const ai=nearestAiDepth(r.ts);
- el('aiDepthValue').textContent=ai?(Number.isFinite(ai.meters)?fmtMeters(ai.meters):(Number.isFinite(ai.relative)?ai.relative.toFixed(0)+' rel.':'—')):'—';
- el('aiDepthCaption').textContent=ai?(Number.isFinite(ai.meters)?'Metric DA3 · scene-video estimate':'Relative depth only · not meters'):'No matched scene frame (±100 ms)';
  const matched=matchedObjectAt(state.index),obj=matched.index>=0?state.objects[matched.index]:null;
  spatialUpdateLive();
  const look=el('lookingAtValue');look.textContent=obj?obj.name:'—';look.title=obj?obj.name:(state.objects.length?'No object sphere contains the estimated gaze point':'No objects defined');
  if(state.objectMatchIndex!==matched.index){state.objectMatchIndex=matched.index;refreshObjectList(matched.index);}
  const pill=el('status');pill.textContent=state.confirmed?'Calibrated · row '+(state.baseline+1):'Provisional baseline';pill.className=state.confirmed?'pill cal':'pill prov';drawScene();drawChart();}
 function quoteCSV(value){const str=String(value??'');return /[,"\r\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str;}
-function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]', 'vergence angle [deg]', 'calibrated vergence distance [m]', 'DA3 scene depth [m]', 'DA3 relative inverse depth','raw spatial gaze horizontal [deg]','raw spatial gaze vertical [deg]','calibrated spatial gaze horizontal [deg]','calibrated spatial gaze vertical [deg]']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const sa=spatialCorrectedAngles(r.i);const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'', Number.isFinite(binocularAngleDeg(r))?binocularAngleDeg(r).toFixed(6):'', Number.isFinite(calibratedDistanceForRow(r).meters)?calibratedDistanceForRow(r).meters.toFixed(6):'',Number.isFinite(nearestAiDepth(r.ts)?.meters)?nearestAiDepth(r.ts).meters.toFixed(6):'', Number.isFinite(nearestAiDepth(r.ts)?.relative)?nearestAiDepth(r.ts).relative:'', Number.isFinite(sa?.raw.h)?sa.raw.h.toFixed(6):'',Number.isFinite(sa?.raw.v)?sa.raw.v.toFixed(6):'',Number.isFinite(sa?.corrected.h)?sa.corrected.h.toFixed(6):'',Number.isFinite(sa?.corrected.v)?sa.corrected.v.toFixed(6):'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+function exportAlignedCSV(){if(!state.tables||!state.rows.length)return;const {eye,imu,fix}=state.tables;const fields=[...eye.headers,...imu.headers.filter(h=>!['section id','recording id'].includes(h.toLowerCase())).map(h=>h.toLowerCase()==='timestamp [ns]'?'matched imu timestamp [ns]':h),...['fixation id','fixation start timestamp [ns]','fixation end timestamp [ns]','estimated vergence distance [m]', 'vergence angle [deg]', 'calibrated vergence distance [m]', 'raw spatial gaze horizontal [deg]','raw spatial gaze vertical [deg]','calibrated spatial gaze horizontal [deg]','calibrated spatial gaze vertical [deg]']];const inds=imu.headers.map((h,i)=>!['section id','recording id'].includes(h.toLowerCase())?i:-1).filter(i=>i>=0);const out=[fields.map(quoteCSV).join(',')];for(const r of state.rows){const sa=spatialCorrectedAngles(r.i);const tail=r.imuRaw?inds.map(i=>r.imuRaw.values[i]):inds.map(_=>'');out.push([...r.eyeRaw.values,...tail,r.fix||'',r.fixRaw?r.fixRaw.ts.toString():'',r.fixRaw?r.fixRaw.values[fix.index('end timestamp [ns]')]:'' ,Number.isFinite(vergenceForRow(r).meters)?vergenceForRow(r).meters.toFixed(6):'', Number.isFinite(binocularAngleDeg(r))?binocularAngleDeg(r).toFixed(6):'', Number.isFinite(calibratedDistanceForRow(r).meters)?calibratedDistanceForRow(r).meters.toFixed(6):'',Number.isFinite(sa?.raw.h)?sa.raw.h.toFixed(6):'',Number.isFinite(sa?.raw.v)?sa.raw.v.toFixed(6):'',Number.isFinite(sa?.corrected.h)?sa.corrected.h.toFixed(6):'',Number.isFinite(sa?.corrected.v)?sa.corrected.v.toFixed(6):'' ].map(quoteCSV).join(','));}const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='neon_aligned_eye_imu_fixations.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
 // Folder imports are selected by the browser; all files stay on the user's machine.
 // Prefer one matching CSV triplet from a single directory to avoid accidentally
 // mixing recordings from nested export folders.
@@ -1559,7 +1528,6 @@ function findRecordingGroups(files){
   const gaze=local.find(e=>e.name==='gaze.csv');
   const world=local.find(e=>e.name==='world_timestamps.csv');
   const camera=local.find(e=>e.name==='scene_camera.json');
-  const depth=local.find(e=>e.name==='gaze_depth_output.csv');
   const clips=local.filter(e=>/\.(mp4|mov|webm|m4v)$/i.test(e.name)&&!/(gaze_depth|undistort|heatmap|audio)/i.test(e.name));
   function segmentBounds(entry){const m=entry.name.match(/_(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\.(mp4|mov|webm)$/i);return m?{start:Number(m[1]),end:Number(m[2])}:null;}
   clips.sort((a,b)=>{
@@ -1574,7 +1542,7 @@ function findRecordingGroups(files){
     }
     return a.name.localeCompare(b.name);
   });
-  result.push({dir,eye,imu,fix,gaze,world,camera,depth,video:clips[0]||null,clipCount:clips.length});
+  result.push({dir,eye,imu,fix,gaze,world,camera,video:clips[0]||null,clipCount:clips.length});
  }
  return result.sort((a,b)=>a.dir.localeCompare(b.dir));
 }
@@ -1610,7 +1578,7 @@ async function loadRecordingGroup(group){
  folderNotice('Reading '+group.dir+' …');
  // Reading the large raw IMU CSV can take a few seconds; rebuild once only.
  let texts;
- try{texts=await Promise.all([group.eye.file.text(),group.imu.file.text(),group.fix.file.text(),group.gaze?.file.text()??Promise.resolve(null),group.depth?.file.text()??Promise.resolve(null),group.world?.file.text()??Promise.resolve(null),group.camera?.file.text()??Promise.resolve(null)]);}
+ try{texts=await Promise.all([group.eye.file.text(),group.imu.file.text(),group.fix.file.text(),group.gaze?.file.text()??Promise.resolve(null),group.world?.file.text()??Promise.resolve(null),group.camera?.file.text()??Promise.resolve(null)]);}
  catch(err){if(token===folderImportVersion)folderNotice('Cannot read folder: '+err.message,true);return;}
  if(token!==folderImportVersion)return;
  pause();
@@ -1624,25 +1592,20 @@ async function loadRecordingGroup(group){
  let gazeWarning='';
  if(group.gaze){try{const parsed=parseGazeCSV(texts[3]);state.gazeRows=parsed.rows;state.gazeRecordingId=parsed.recordingId;state.gazeName=group.gaze.file.name;el('gazeFileName').textContent=group.gaze.file.name;el('gazeFile').closest('.upload-slot').classList.add('loaded');}
  catch(e){gazeWarning=' Gaze file error: '+e.message;}}
- state.aiDepthRows=[];state.aiDepthName=null;
- el('aiDepthFileName').textContent='Choose gaze_depth_output.csv';el('aiDepthFile').closest('.upload-slot').classList.remove('loaded');
- el('aiDepthMetric').hidden=true;document.querySelector('.metric-row-primary').classList.remove('has-ai-depth');
- if(group.depth){try{state.aiDepthRows=parseAiDepthCSV(texts[4]);state.aiDepthName=group.depth.file.name;el('aiDepthFileName').textContent=group.depth.file.name;el('aiDepthFile').closest('.upload-slot').classList.add('loaded');el('aiDepthMetric').hidden=false;document.querySelector('.metric-row-primary').classList.add('has-ai-depth');}
- catch(e){gazeWarning+=' DA3 error: '+e.message;}}
  // New folder: never carry over the previous recording's timing.
  state.worldTiming=null;state.syncMode='unverified';
  el('worldFileName').textContent='Recommended · world_timestamps.csv';
  el('worldFile').closest('.upload-slot').classList.remove('loaded');
  let worldWarning='';
  if(group.world){try{
-    state.worldTiming=parseWorldTiming(texts[5]);
+    state.worldTiming=parseWorldTiming(texts[4]);
     el('worldFileName').textContent=group.world.file.name;
     el('worldFile').closest('.upload-slot').classList.add('loaded');
    }catch(e){worldWarning=' World timestamp error: '+e.message;}}
  state.cameraCalibration=null;
  el('camFileName').textContent='Recommended · scene_camera.json';
  el('camFile').closest('.upload-slot').classList.remove('loaded');
- if(group.camera){try{state.cameraCalibration=parseSceneCamera(texts[6]);el('camFileName').textContent=group.camera.file.name;el('camFile').closest('.upload-slot').classList.add('loaded');}
+ if(group.camera){try{state.cameraCalibration=parseSceneCamera(texts[5]);el('camFileName').textContent=group.camera.file.name;el('camFile').closest('.upload-slot').classList.add('loaded');}
  catch(err){gazeWarning+=' Camera calibration error: '+err.message;}}
  // Object positions belong to a specific recording and baseline, never carry them into another recording.
  state.objects=[];cancelObjectEdit();refreshObjectList();objectMessage('New recording loaded. Define objects relative to its baseline.');
@@ -1650,8 +1613,8 @@ async function loadRecordingGroup(group){
  attachVideoFile(group.video?.file||null);
  rebuild();
  applyAutomaticVideoSync();
- updateGazeStatus();updateAiDepthStatus();drawGazeOverlay();
- const found=['eye states','IMU','fixations',...(group.gaze?['gaze']:[]),...(group.video?['video']:[]),...(group.world?['world timestamps']:[]),...(group.camera?['scene camera']:[]),...(group.depth?['DA3 depth']:[])];
+ updateGazeStatus();drawGazeOverlay();
+ const found=['eye states','IMU','fixations',...(group.gaze?['gaze']:[]),...(group.video?['video']:[]),...(group.world?['world timestamps']:[]),...(group.camera?['scene camera']:[])];
  let message='Loaded '+found.join(', ')+'.';
  if(!group.video)message+=' No scene video found; you can add it manually.';
  if(!group.gaze)message+=' No gaze.csv found; gaze marker is optional.';
@@ -1710,18 +1673,17 @@ el('gazeFile').addEventListener('change',async event=>{
  }catch(err){el('gazeStatus').textContent='Could not read gaze.csv: '+err.message;el('gazeStatus').classList.add('warn');}
  event.target.value='';
 });
-el('aiDepthFile').addEventListener('change',async event=>{
- const file=event.target.files?.[0];if(!file)return;
- try{
-  const parsed=parseAiDepthCSV(await file.text());
-  state.aiDepthRows=parsed;state.aiDepthName=file.name;
-  el('aiDepthFileName').textContent=file.name;
-  el('aiDepthFile').closest('.upload-slot').classList.add('loaded');
-  el('aiDepthMetric').hidden=false;
-  document.querySelector('.metric-row-primary').classList.add('has-ai-depth');
-  updateAiDepthStatus();render();
- }catch(error){el('aiDepthStatus').textContent='Could not read DA3 file: '+error.message;el('aiDepthStatus').classList.add('error');}
-});
+// Keep both calibration workflows available without resetting a fitted model on view changes.
+function setCalibrationMode(mode){
+ const nine=mode==='nine';
+ el('calThreePanel').hidden=nine;
+ el('calNinePanel').hidden=!nine;
+ for(const radio of document.querySelectorAll('input[name="calibrationMethod"]'))radio.checked=(radio.value===mode);
+}
+for(const radio of document.querySelectorAll('input[name="calibrationMethod"]')){
+ radio.addEventListener('change',()=>{if(radio.checked)setCalibrationMode(radio.value);});
+}
+setCalibrationMode('three');
 spatialBuildUI();
 el('spatialFit').addEventListener('click',spatialFitAll);
 el('spatialReset').addEventListener('click',()=>{state.spatialCalibration.csvReady=false;state.spatialCalibration.csvName=null;spatialReset();});
