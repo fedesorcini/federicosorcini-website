@@ -361,7 +361,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 </section>
 <section class="card import-card">
   <div class="section-title">Files</div>
-  <label class="folder-picker" for="folderFile">▣ Select recording folder<small>Automatically find eye, IMU, fixation, gaze and video files</small><input id="folderFile" type="file" webkitdirectory directory multiple aria-label="Select Neon recording folder" /></label>
+  <label class="folder-picker" for="folderFile">▣ Select recording folder<small>Automatically find eye, IMU, fixation, gaze, video and timestamp files</small><input id="folderFile" type="file" webkitdirectory directory multiple aria-label="Select Neon recording folder" /></label>
   <div id="folderStatus" class="folder-message" role="status" aria-live="polite">Choose the folder containing the Neon exports.</div>
   <div id="folderRecordingChooser" class="folder-recording-chooser" hidden><label for="folderRecordingSelect">Select recording</label><select id="folderRecordingSelect" class="mode-select"></select></div>
   <details class="manual-import"><summary>Upload files individually (fallback)</summary>
@@ -371,6 +371,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <label class="upload-slot"><span><b>3.</b> Fixations <small id="fixFileName">Choose fixations.csv</small></span><input id="fixFile" type="file" accept=".csv,text/csv" aria-label="Upload fixations CSV" /></label>
     <label class="upload-slot"><span><b>4.</b> Video <small id="videoFileName">Choose video file</small></span><input id="videoFile" type="file" accept="video/*,.mov,.mp4,.webm" aria-label="Upload recording video" /></label>
     <label class="upload-slot"><span><b>5.</b> Gaze <small id="gazeFileName">Optional · choose gaze.csv</small></span><input id="gazeFile" type="file" accept=".csv,text/csv" aria-label="Upload Pupil Labs Neon gaze CSV" /></label>
+    <label class="upload-slot"><span><b>6.</b> World timestamps <small id="worldFileName">Recommended · world_timestamps.csv</small></span><input id="worldFile" type="file" accept=".csv,text/csv" aria-label="Upload Neon world timestamps CSV for exact video synchronization" /></label>
   </div>
   </details>
   <div class="file-info"><strong id="filename">Select a recording folder</strong><div class="file-meta" id="fileStats">All files are processed locally in your browser.</div></div>
@@ -442,7 +443,8 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
     <div id="gazeStatus" class="gaze-marker-state" aria-live="polite">Upload gaze.csv to show a gaze marker</div>
     <div class="video-clock"><span>Video <strong id="videoNow">0:00.00</strong></span><span id="videoEnd">—</span></div>
     <input id="videoScrub" type="range" class="input-range" min="0" max="100" step="0.01" value="0" disabled aria-label="Find a video frame for synchronization" />
-    <div class="sync-row"><label for="videoOffset" style="color:#b9c7d5;font-size:11px">Video offset (s)</label><input id="videoOffset" class="field" type="number" value="0" step="0.05" aria-label="Video offset in seconds" /><button id="matchVideo" class="sync-button" type="button" disabled>Align to selected row</button></div>
+    <div class="sync-row"><label for="videoOffset" style="color:#b9c7d5;font-size:11px">Video offset (s)</label><input id="videoOffset" class="field" type="number" value="0" step="0.000001" aria-label="Video offset in seconds" /><button id="matchVideo" class="sync-button" type="button" disabled>Align to selected row</button></div>
+    <div id="syncInfo" class="gaze-marker-state" aria-live="polite">Video timing not verified. Add world_timestamps.csv for automatic alignment.</div>
     <div id="videoStatus" class="video-status" hidden></div>
   </div>
 </section>
@@ -660,8 +662,61 @@ function normalizedQ(q){const m=Math.hypot(...q);return Number.isFinite(m)&&m>.5
 function axisValid(row,prefix,threshold){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);const aperture=row[prefix+'Aperture'];return Number.isFinite(mag)&&mag>.2&&mag<2&&(!Number.isFinite(aperture)||aperture>=threshold);}
 function azimuthForEye(q,row,prefix){const mag=Math.hypot(row[prefix+'X'],row[prefix+'Y'],row[prefix+'Z']);return topDownAzimuth(quaternionRotate(q,sceneDirectionToImu(row[prefix+'X']/mag,row[prefix+'Y']/mag,row[prefix+'Z']/mag)));}
 function unwrapField(rows,src,dst){let prev=NaN,cont=NaN;for(const r of rows){const v=r[src];if(Number.isFinite(v)){cont=Number.isFinite(prev)?cont+wrap180(v-prev):v;prev=v;r[dst]=cont;}else r[dst]=NaN;}}
-const state={rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null};
+const state={worldTiming:null,videoClipStartSec:0,videoFileName:null,syncMode:'unverified',rows:[],fixations:[],navMode:'row',calibration:{points:[null,null,null],fit:null},index:0,baseline:0,confirmed:false,playing:false,raf:0,speed:1,epoch:0,startS:0,videoURL:null,videoReady:false,videoOffset:0,sources:{eye:null,imu:null,fix:null},tables:null,alignedMeta:null,realTime:true,aiDepthRows:[],aiDepthName:null,aiMatchedCount:0,gazeRows:[],gazeRecordingId:null,gazeName:null,gazeMessage:null};
 const tickTime=(a,b)=>Number(a-b)/1e9;
+// Video is aligned using world_timestamps.csv, not by assuming that the first
+// eye-state sample occurred at the first video frame. For segmented Neon video,
+// the filename's segment start is applied to the recording's world timebase.
+function segmentStartSeconds(name){
+ const m=String(name||'').match(/_([0-9]+(?:\.[0-9]+)?)-([0-9]+(?:\.[0-9]+)?)\.(?:mp4|mov|m4v|webm)$/i);
+ return m?Number(m[1]):0;
+}
+function parseWorldTiming(content){
+ const parsed=parseTable(content,['timestamp [ns]']);
+ if(!parsed.rows.length)throw Error('World timestamp file has no frames.');
+ for(let i=1;i<parsed.rows.length;i++)if(parsed.rows[i].ts<=parsed.rows[i-1].ts)throw Error('World timestamps are not strictly increasing.');
+ const idColumn=parsed.index('recording id');
+ const sectionColumn=parsed.index('section id');
+ return {first:parsed.rows[0].ts,last:parsed.rows.at(-1).ts,
+   count:parsed.rows.length,
+   recordingId:idColumn>=0?valueAt(parsed.rows[0],idColumn):null,
+   sectionId:sectionColumn>=0?valueAt(parsed.rows[0],sectionColumn):null};
+}
+function setVideoOffset(seconds){
+ if(!Number.isFinite(seconds))return;
+ state.videoOffset=seconds;
+ el('videoOffset').value=seconds.toFixed(6);
+}
+function syncInfo(message){el('syncInfo').textContent=message;}
+function applyAutomaticVideoSync(){
+ if(!state.worldTiming||!state.rows.length){
+   if(!state.worldTiming)syncInfo('Video timing not verified. Add world_timestamps.csv for automatic alignment.');
+   else syncInfo('World timestamps loaded. Load eye-state data for synchronization.');
+   return;
+ }
+ const world=state.worldTiming;
+ const eyeTable=state.tables?.eye;
+ const recIdx=eyeTable?.index('recording id')??-1;
+ const secIdx=eyeTable?.index('section id')??-1;
+ const firstRow=eyeTable?.rows?.[0];
+ if((world.recordingId&&recIdx>=0&&valueAt(firstRow,recIdx)!==world.recordingId)||
+    (world.sectionId&&secIdx>=0&&valueAt(firstRow,secIdx)!==world.sectionId)){
+   state.syncMode='unverified';
+   syncInfo('WARNING: world_timestamps.csv belongs to a different recording. Automatic synchronization disabled.');
+   return;
+ }
+ const clipStart=state.videoClipStartSec||0;
+ const duration=Number(world.last-world.first)/1e9;
+ if(clipStart>duration+1){
+   state.syncMode='unverified';syncInfo('Video segment start exceeds the provided world timestamps. Check selected video.');return;
+ }
+ const autoOffset=tickTime(state.rows[0].ts,world.first)-clipStart;
+ setVideoOffset(autoOffset);
+ state.syncMode='auto';
+ syncInfo('Synchronized from '+world.count.toLocaleString()+' world timestamps · automatic offset '+(autoOffset>=0?'+':'')+autoOffset.toFixed(3)+' s'+(clipStart>0?' · clip begins at '+clipStart.toFixed(3)+' s':'')+'.');
+ if(state.videoReady)seekVideoForDataTime(state.rows[state.index].sec);
+}
+
 // The Neon Player plugin provides one output per scene-camera frame, with original
 // scene timestamps in integer nanoseconds. Match to eye-state timestamps, not
 // video.currentTime or a guessed frame rate. No AI inference runs here.
@@ -814,7 +869,7 @@ function rebuild(){if(!['eye','imu','fix'].every(k=>state.sources[k]))return;pau
  try{const merged=buildMerged();state.rows=merged.rows;state.fixations=makeFixationIndex(state.rows);state.navMode='row';clearVergenceCalibration(true);state.tables=merged.tables;state.alignedMeta=merged.stats;state.index=0;state.baseline=state.rows.findIndex(r=>Number.isFinite(r.gyroHead));state.confirmed=false;state.index=state.baseline;
  const n=merged.stats;el('filename').textContent=n.eye.toLocaleString()+' eye-state samples aligned';el('fileStats').textContent=n.matched.toLocaleString()+'/'+n.eye.toLocaleString()+' matched IMU · '+n.fixCount.toLocaleString()+' fixation-labeled · '+n.rightOpen.toLocaleString()+' right-eye open';
  el('scrub').max=state.rows.length-1;el('scrub').disabled=false;el('navByFix').disabled=!state.fixations.length;el('matchVideo').disabled=!state.videoReady;el('rowNumber').max=state.rows.length;el('rowNumber').disabled=false;for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2'])el(id).disabled=false;
- el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);updateAiDepthStatus();updateGazeStatus();resizeAll();
+ el('baselineNote').textContent='Baseline · row '+(state.baseline+1)+' (provisional)';el('timeEnd').textContent=state.rows.at(-1).sec.toFixed(2)+' s';el('chartEnd').textContent=state.rows.at(-1).sec.toFixed(1)+' s';setIndex(state.baseline);updateAiDepthStatus();updateGazeStatus();applyAutomaticVideoSync();resizeAll();
  }catch(err){state.rows=[];state.fixations=[];clearVergenceCalibration(true);state.tables=null;state.alignedMeta=null;el('uiError').hidden=false;el('uiError').textContent='Could not align files: '+err.message;el('filename').textContent='Alignment failed';updateGazeStatus();drawGazeOverlay();for(const id of ['play','calibrate','toBaseline','prev','step','exportCsv','calCapture0','calCapture1','calCapture2','navByFix'])el(id).disabled=true;}
 }
 const video=el('video');
@@ -970,6 +1025,7 @@ function findRecordingGroups(files){
   if(!eye||!imu||!fix)continue;
   const local=entries.filter(e=>e.dir===dir||e.dir.startsWith(dir+'/'));
   const gaze=local.find(e=>e.name==='gaze.csv');
+  const world=local.find(e=>e.name==='world_timestamps.csv');
   const depth=local.find(e=>e.name==='gaze_depth_output.csv');
   const clips=local.filter(e=>/\.(mp4|mov|webm|m4v)$/i.test(e.name)&&!/(gaze_depth|undistort|heatmap|audio)/i.test(e.name));
   function segmentBounds(entry){const m=entry.name.match(/_(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\.(mp4|mov|webm)$/i);return m?{start:Number(m[1]),end:Number(m[2])}:null;}
@@ -985,7 +1041,7 @@ function findRecordingGroups(files){
     }
     return a.name.localeCompare(b.name);
   });
-  result.push({dir,eye,imu,fix,gaze,depth,video:clips[0]||null,clipCount:clips.length});
+  result.push({dir,eye,imu,fix,gaze,world,depth,video:clips[0]||null,clipCount:clips.length});
  }
  return result.sort((a,b)=>a.dir.localeCompare(b.dir));
 }
@@ -993,7 +1049,7 @@ function folderNotice(message,error=false){const node=el('folderStatus');node.te
 function clearLocalVideo(){
  pause();state.videoReady=false;
  if(state.videoURL)URL.revokeObjectURL(state.videoURL);
- state.videoURL=null;video.removeAttribute('src');video.load();
+ state.videoURL=null;state.videoFileName=null;state.videoClipStartSec=0;video.removeAttribute('src');video.load();
  el('videoPlaceholder').hidden=false;el('videoIndicator').textContent='No video';
  el('videoScrub').disabled=true;el('matchVideo').disabled=true;
  el('videoEnd').textContent='—';el('videoNow').textContent='0:00.00';
@@ -1006,19 +1062,22 @@ function attachVideoFile(file){
  pause();state.videoReady=false;drawGazeOverlay();
  if(state.videoURL)URL.revokeObjectURL(state.videoURL);
  state.videoURL=URL.createObjectURL(file);
+ state.videoFileName=file.name;
+ state.videoClipStartSec=segmentStartSeconds(file.name);
  video.src=state.videoURL;video.muted=!el('videoSound').checked;
  el('videoFileName').textContent=file.name;
  el('videoFile').closest('.upload-slot').classList.add('loaded');
  el('videoIndicator').textContent='Loading video';
  el('videoPlaceholder').hidden=true;
  setVideoStatus('Loading '+file.name+' …');video.load();
+ applyAutomaticVideoSync();
 }
 async function loadRecordingGroup(group){
  const token=++folderImportVersion;
  folderNotice('Reading '+group.dir+' …');
  // Reading the large raw IMU CSV can take a few seconds; rebuild once only.
  let texts;
- try{texts=await Promise.all([group.eye.file.text(),group.imu.file.text(),group.fix.file.text(),group.gaze?.file.text()??Promise.resolve(null),group.depth?.file.text()??Promise.resolve(null)]);}
+ try{texts=await Promise.all([group.eye.file.text(),group.imu.file.text(),group.fix.file.text(),group.gaze?.file.text()??Promise.resolve(null),group.depth?.file.text()??Promise.resolve(null),group.world?.file.text()??Promise.resolve(null)]);}
  catch(err){if(token===folderImportVersion)folderNotice('Cannot read folder: '+err.message,true);return;}
  if(token!==folderImportVersion)return;
  pause();
@@ -1037,17 +1096,28 @@ async function loadRecordingGroup(group){
  el('aiDepthMetric').hidden=true;document.querySelector('.metric-row-primary').classList.remove('has-ai-depth');
  if(group.depth){try{state.aiDepthRows=parseAiDepthCSV(texts[4]);state.aiDepthName=group.depth.file.name;el('aiDepthFileName').textContent=group.depth.file.name;el('aiDepthFile').closest('.upload-slot').classList.add('loaded');el('aiDepthMetric').hidden=false;document.querySelector('.metric-row-primary').classList.add('has-ai-depth');}
  catch(e){gazeWarning+=' DA3 error: '+e.message;}}
- // A new folder is a new recording: do not carry over its previous video offset.
- el('videoOffset').value='0';state.videoOffset=0;
+ // New folder: never carry over the previous recording's timing.
+ state.worldTiming=null;state.syncMode='unverified';
+ el('worldFileName').textContent='Recommended · world_timestamps.csv';
+ el('worldFile').closest('.upload-slot').classList.remove('loaded');
+ let worldWarning='';
+ if(group.world){try{
+    state.worldTiming=parseWorldTiming(texts[5]);
+    el('worldFileName').textContent=group.world.file.name;
+    el('worldFile').closest('.upload-slot').classList.add('loaded');
+   }catch(e){worldWarning=' World timestamp error: '+e.message;}}
+ setVideoOffset(0);
  attachVideoFile(group.video?.file||null);
  rebuild();
+ applyAutomaticVideoSync();
  updateGazeStatus();updateAiDepthStatus();drawGazeOverlay();
- const found=['eye states','IMU','fixations',...(group.gaze?['gaze']:[]),...(group.video?['video']:[]),...(group.depth?['DA3 depth']:[])];
+ const found=['eye states','IMU','fixations',...(group.gaze?['gaze']:[]),...(group.video?['video']:[]),...(group.world?['world timestamps']:[]),...(group.depth?['DA3 depth']:[])];
  let message='Loaded '+found.join(', ')+'.';
  if(!group.video)message+=' No scene video found; you can add it manually.';
  if(!group.gaze)message+=' No gaze.csv found; gaze marker is optional.';
+ if(!group.world)message+=' No world_timestamps.csv: verify video synchronization manually.';
  if(group.clipCount>1)message+=' Found '+group.clipCount+' video clips: loaded only the first/primary clip. Use a combined video for full-recording playback.';
- folderNotice(message+gazeWarning,!!gazeWarning);
+ folderNotice(message+gazeWarning+worldWarning,!!gazeWarning||!!worldWarning);
 }
 el('folderFile').addEventListener('change',event=>{
  const files=event.target.files;
@@ -1075,6 +1145,16 @@ el('folderRecordingSelect').addEventListener('change',e=>{
 for(const [kind,inputId,nameId] of [['eye','eyeFile','eyeFileName'],['imu','imuFile','imuFileName'],['fix','fixFile','fixFileName']]){
  el(inputId).addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{state.sources[kind]={text:await file.text(),name:file.name};el(nameId).textContent=file.name;el(inputId).closest('.upload-slot').classList.add('loaded');rebuild();}catch(err){el('uiError').textContent='Could not read '+file.name+': '+err.message;el('uiError').hidden=false;}});
 }
+el('worldFile').addEventListener('change',async event=>{
+ const file=event.target.files?.[0];if(!file)return;
+ try{
+   state.worldTiming=parseWorldTiming(await file.text());
+   el('worldFileName').textContent=file.name;
+   el('worldFile').closest('.upload-slot').classList.add('loaded');
+   applyAutomaticVideoSync();
+ }catch(err){state.worldTiming=null;state.syncMode='unverified';syncInfo('Could not load world timestamps: '+err.message);}
+ event.target.value='';
+});
 el('gazeFile').addEventListener('change',async event=>{
  const file=event.target.files?.[0];if(!file)return;
  try{
@@ -1120,11 +1200,11 @@ function pointToIndex(event){const rect=over.getBoundingClientRect();return clam
 document.addEventListener('keydown',e=>{if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();play();}else if(e.code==='ArrowRight'&&state.rows.length){e.preventDefault();setIndex(state.index+1);}else if(e.code==='ArrowLeft'&&state.rows.length){e.preventDefault();setIndex(state.index-1);}});
 window.addEventListener('resize',resizeAll);if(typeof ResizeObserver!=='undefined')new ResizeObserver(drawGazeOverlay).observe(gazeCanvas.parentElement);
 el('videoFile').addEventListener('change',e=>{const file=e.target.files?.[0];if(file)attachVideoFile(file);});
-video.addEventListener('loadedmetadata',()=>{state.videoReady=true;const duration=video.duration;el('videoIndicator').textContent='Ready';el('videoScrub').disabled=false;el('videoScrub').max=Number.isFinite(duration)?duration:100000;el('videoEnd').textContent=Number.isFinite(duration)?clockFmt(duration):'Unknown duration';el('matchVideo').disabled=!state.rows.length;seekVideoForDataTime(state.rows[state.index]?.sec||0);setVideoStatus('');updateGazeStatus();resizeAll();});
+video.addEventListener('loadedmetadata',()=>{state.videoReady=true;const duration=video.duration;el('videoIndicator').textContent='Ready';el('videoScrub').disabled=false;el('videoScrub').max=Number.isFinite(duration)?duration:100000;el('videoEnd').textContent=Number.isFinite(duration)?clockFmt(duration):'Unknown duration';el('matchVideo').disabled=!state.rows.length;applyAutomaticVideoSync();seekVideoForDataTime(state.rows[state.index]?.sec||0);setVideoStatus('');updateGazeStatus();resizeAll();});
 video.addEventListener('error',()=>{if(!video.src)return;state.videoReady=false;el('videoIndicator').textContent='Video error';el('videoPlaceholder').hidden=false;setVideoStatus('Browser could not decode this video. Try MP4 (H.264) or WebM.',true);updateGazeStatus();drawGazeOverlay();});
 video.addEventListener('timeupdate',updateVideoClock);video.addEventListener('seeked',drawGazeOverlay);video.addEventListener('loadeddata',drawGazeOverlay);el('gazeVisible').addEventListener('change',drawGazeOverlay);el('videoScrub').addEventListener('input',e=>{if(!state.videoReady)return;pause();video.currentTime=Number(e.target.value);updateVideoClock();});
-el('matchVideo').addEventListener('click',()=>{if(!state.videoReady||!state.rows.length)return;pause();const offset=video.currentTime-state.rows[state.index].sec;el('videoOffset').value=offset.toFixed(3);state.videoOffset=offset;setVideoStatus('Aligned · video '+clockFmt(video.currentTime)+' · data row '+(state.index+1));drawGazeOverlay();});
-el('videoOffset').addEventListener('change',()=>{pause();state.videoOffset=videoOffset();if(state.rows.length)seekVideoForDataTime(state.rows[state.index].sec);setVideoStatus('Offset · '+state.videoOffset.toFixed(3)+' s');drawGazeOverlay();});el('videoSound').addEventListener('change',e=>{video.muted=!e.target.checked;});video.addEventListener('click',()=>{if(state.videoReady&&state.rows.length)play();});
+el('matchVideo').addEventListener('click',()=>{if(!state.videoReady||!state.rows.length)return;pause();const offset=video.currentTime-state.rows[state.index].sec;setVideoOffset(offset);state.syncMode='manual';syncInfo('Manual alignment at row '+(state.index+1).toLocaleString()+' · offset '+offset.toFixed(3)+' s.');setVideoStatus('Aligned · video '+clockFmt(video.currentTime)+' · data row '+(state.index+1));drawGazeOverlay();});
+el('videoOffset').addEventListener('change',()=>{pause();state.videoOffset=videoOffset();state.syncMode='manual';syncInfo('Manual video offset '+state.videoOffset.toFixed(3)+' s.');if(state.rows.length)seekVideoForDataTime(state.rows[state.index].sec);setVideoStatus('Offset · '+state.videoOffset.toFixed(3)+' s');drawGazeOverlay();});el('videoSound').addEventListener('change',e=>{video.muted=!e.target.checked;});video.addEventListener('click',()=>{if(state.videoReady&&state.rows.length)play();});
 // Trigger initial rendering of empty-stage grid.
 resizeAll();
 
