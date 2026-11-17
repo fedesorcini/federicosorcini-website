@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Eye &amp; Head Viewer | Federico Sorcini</title>
-<!-- Version 22: farther zoom-out, lower head position, full 0.5 m distance rings -->
+<!-- Version 23: calibrated distance drives eye-ray convergence; fixation-aware vergence smoothing -->
 <meta name="description" content="Explore Pupil Labs Neon eye and head movements, vergence calibration, synchronized scene video and gaze-position overlays in your browser." />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta property="og:title" content="Neon Eye & Head Viewer" />
@@ -406,6 +406,13 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
   <div class="speed-row" id="speeds"><button class="speed" data-speed="0.25">0.25×</button><button class="speed" data-speed="0.5">0.5×</button><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="2">2×</button><button class="speed" data-speed="4">4×</button></div>
   <label class="check"><input type="checkbox" id="guides" checked/> Angle guides</label>
   <div class="rowlabel eye-threshold"><label for="eyeThreshold">Minimum open eyelid</label><div><input type="number" id="eyeThreshold" class="field small" min="0" max="12" step="0.2" value="1.0"/> mm</div></div>
+  <div class="rowlabel"><label for="vergSmooth">Vergence smoothing</label></div>
+  <select id="vergSmooth" class="mode-select" aria-label="Vergence smoothing window">
+    <option value="0">Off · instantaneous</option>
+    <option value="150">150 ms · median</option>
+    <option value="300" selected>300 ms · median (recommended)</option>
+    <option value="500">500 ms · median</option>
+  </select>
   <div class="rowlabel ipd-setting"><label for="ipdMm">Interpupillary distance</label><div><input type="number" id="ipdMm" class="field small" min="40" max="85" step="1" value="64"/> mm</div></div>
 </section>
 </aside>
@@ -426,7 +433,7 @@ button,input,select,textarea{font-family:"PT Serif",Georgia,serif}
 </section>
 
 <div class="viewer-pair">
-<section class="stage"><div class="stage-top"><div><div class="stage-title">Participant · overhead</div></div><span class="pill prov" id="status">Provisional baseline</span></div><div class="stage-canvas"><canvas id="scene" role="img" aria-label="Top-down head orientation with left and right eye directions"></canvas></div><div class="legend"><span><i class="swatch blue"></i> Head direction</span><span><i class="swatch gold"></i> Left eye direction</span><span><i class="swatch purple"></i> Right eye direction</span></div></section>
+<section class="stage"><div class="stage-top"><div><div class="stage-title">Participant · overhead</div></div><span class="pill prov" id="status">Provisional baseline</span></div><div class="stage-canvas"><canvas id="scene" role="img" aria-label="Top-down head orientation with left and right eye directions"></canvas></div><div class="legend"><span><i class="swatch blue"></i> Head direction</span><span><i class="swatch gold"></i> Left eye direction</span><span><i class="swatch purple"></i> Right eye direction</span><span><i class="swatch" style="background:#568871"></i> Estimated depth</span></div></section>
 <section class="video-stage">
   <div class="stage-top"><div><div class="stage-title">Video</div></div><span class="pill" id="videoIndicator">No video</span></div>
   <div class="video-display"><video id="video" playsinline preload="metadata" aria-label="Uploaded recording video"></video><canvas id="gazeOverlay" class="gaze-overlay" aria-hidden="true"></canvas><div id="videoPlaceholder" class="video-placeholder"><span style="font-size:34px">▣</span><strong>No video loaded</strong></div></div>
@@ -501,17 +508,42 @@ function sampleAngles(startIndex,endIndex){
  const kept=all.filter(x=>Math.abs(x-mid)<=tolerance);
  return {angle:medianOf(kept),n:kept.length,total:all.length,mad:medianOf(kept.map(x=>Math.abs(x-medianOf(kept))))};
 }
-function calibratedDistanceForRow(row){
+function calibratedDistanceFromAngle(theta){
  const fit=state.calibration.fit;
  if(!fit)return {meters:NaN,reason:'Not calibrated'};
- const theta=binocularAngleDeg(row);
  if(!Number.isFinite(theta))return {meters:NaN,reason:'Both eyes must be open'};
  const diff=theta-fit.a;
  if(!(diff>0.001))return {meters:Infinity,reason:'At/beyond far limit · unstable'};
  const meters=fit.b/diff;
  if(!(meters>0)||!Number.isFinite(meters))return {meters:NaN,reason:'No usable calibrated distance'};
- const outside=meters<0.5||meters>3;
- return {meters,reason:outside?'Extrapolated beyond 0.5–3 m · uncertain':'Within calibrated 0.5–3 m range'};
+ return {meters,reason:(meters<0.5||meters>3)?'Extrapolated beyond 0.5–3 m · uncertain':'Within calibrated 0.5–3 m range'};
+}
+function calibratedDistanceForRow(row){return calibratedDistanceFromAngle(binocularAngleDeg(row));}
+// Smooth the vergence ANGLE before converting to meters. This is much more stable
+// than averaging reciprocal distances, particularly toward far fixation.
+// Never bridge different fixation IDs and never infer depth through a closed eye.
+function displayedVergenceForIndex(index){
+ const rows=state.rows,row=rows[index];
+ if(!row?.leftValid||!row?.rightValid)return {meters:NaN,reason:'Both eyes must be open'};
+ const windowMs=Number(el('vergSmooth').value)||0;
+ if(windowMs<=0)return state.calibration.fit?calibratedDistanceForRow(row):vergenceForRow(row);
+ const half=windowMs/2000,time=row.sec,ordinal=row.fixOrdinal;
+ // Both scans are time-bounded and normally cover just 30–100 eye samples.
+ let lo=index,hi=index;
+ while(lo>0&&time-rows[lo-1].sec<=half)lo--;
+ while(hi+1<rows.length&&rows[hi+1].sec-time<=half)hi++;
+ const angles=[],raw=[];
+ for(let i=lo;i<=hi;i++){
+  const r=rows[i];
+  if(r.fixOrdinal!==ordinal||!r.leftValid||!r.rightValid)continue;
+  const angle=binocularAngleDeg(r);
+  if(Number.isFinite(angle))angles.push(angle);
+  if(!state.calibration.fit){const v=vergenceForRow(r).meters;if(Number.isFinite(v)&&v>0)raw.push(v);}
+ }
+ if(angles.length<3)return state.calibration.fit?calibratedDistanceForRow(row):vergenceForRow(row);
+ if(state.calibration.fit)return calibratedDistanceFromAngle(medianOf(angles));
+ const meters=medianOf(raw);
+ return {meters,reason:Number.isFinite(meters)?'Smoothed horizontal optical-axis estimate':'No valid convergence'};
 }
 function makeFixationIndex(rows){
  const groups=[],lookup=new Map();
@@ -806,18 +838,22 @@ function txt(ctx,t,x,y,size,color,align='center',weight=500){ctx.font=weight+' '
 function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.68;g.clearRect(0,0,w,h);const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#fbfaf7');g.fillStyle=bg;g.fillRect(0,0,w,h);const gap=38;for(let x=cx%gap;x<w;x+=gap)stroke(g,x,0,x,h,'#E8E5DF',.65);for(let y=cy%gap;y<h;y+=gap)stroke(g,0,y,w,y,'#E8E5DF',.65);
  if(el('guides').checked){const radialL=Math.min(295,w*.45,h*.62);for(const angle of [-90,-60,-45,-30,-15,15,30,45,60,90]){const a=angle*RAD;stroke(g,cx,cy,cx+Math.sin(a)*radialL,cy-Math.cos(a)*radialL,'#DADFD9',1,[4,7]);if(Math.abs(angle)<90)txt(g,(angle>0?'+':'')+angle+'°',cx+Math.sin(a)*(radialL+12),cy-Math.cos(a)*(radialL+12),10,'#7C898F');}
   const maxR=Math.max(70,Math.min(w*.46,h*.60,cy-26));
-  const step=maxR/6;
+  const step=maxR/6; // 0.5 m per ring; shared with calibrated fixation marker below
   for(let n=1;n<=6;n++){const r=step*n;g.beginPath();g.strokeStyle='#D2D9D6';g.lineWidth=1;g.arc(cx,cy,r,0,Math.PI*2);g.stroke();
-    const labelY=cy-r;stroke(g,cx-7,labelY,cx+7,labelY,'#B8C2C1',1.2);txt(g,(n*0.5).toFixed(1)+' m',cx+28,labelY,10,'#6D7C81','left',700);}
+    const labelAngle=50*RAD,tx=cx+Math.sin(labelAngle)*r,ty=cy-Math.cos(labelAngle)*r;
+    stroke(g,tx-4,ty-4,tx+4,ty+4,'#B8C2C1',1.2);
+    txt(g,(n*0.5).toFixed(1)+' m',tx+11,ty-7,10,'#6D7C81','left',700);}
  }
  stroke(g,cx,0,cx,cy,'#9DAEA6',1.1,[6,7]);txt(g,'BASELINE HEAD / 0°',cx,18,10,'#324C63','center',800);
- g.save();g.translate(cx,cy);const scale=Math.min(w/560,h/560,0.92);g.scale(scale,scale);
+ g.save();g.translate(cx,cy);const scale=Math.min(w/700,h/680,0.72);g.scale(scale,scale);
  const r=state.rows[state.index],a=angles(state.index);if(!r||!a){g.restore();return;}
  g.rotate(Number.isFinite(a.headDraw)?a.headDraw*RAD:0);
  g.beginPath();g.ellipse(0,0,48,56,0,0,2*Math.PI);g.fillStyle='#d9bba8';g.fill();g.strokeStyle='#a88b7c';g.lineWidth=2.6;g.stroke();g.beginPath();g.ellipse(-49,5,7,12,0,0,Math.PI*2);g.ellipse(49,5,7,12,0,0,Math.PI*2);g.fillStyle='#b99a86';g.fill();g.beginPath();g.ellipse(0,11,42,38,0,Math.PI,Math.PI*2);g.fillStyle='#4c4d58';g.fill();g.beginPath();g.moveTo(-11,-50);g.lineTo(0,-70);g.lineTo(11,-50);g.closePath();g.fillStyle='#dab9a5';g.fill();g.strokeStyle='#9d8276';g.stroke();
- // Each eye ray starts at its pupil and ends at the visible binocular intersection,
- // or at its own viewport edge if the rays are parallel, diverging, or meet off-screen.
- // This is a 2D schematic intersection, not an estimate of real-world gaze depth.
+ // Rings use a fixed 0.5 m spacing, measured radially from the head center.
+ // Once calibrated, show the estimated fixation location using the same smoothed
+ // distance displayed in the metric card. The mean measured eye direction controls
+ // the bearing, while the illustrated rays meet at the calibrated depth.
+ // Head and eye symbols are enlarged schematics, not anatomical scale drawings.
  const headRad=Number.isFinite(a.headDraw)?a.headDraw*RAD:0;
  const cosHead=Math.cos(headRad),sinHead=Math.sin(headRad);
  const eyes=[['left',-23,'#B67434'],['right',23,'#8666A6']].map(([prefix,x,color])=>{
@@ -828,7 +864,6 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.68;g.clearR
    const dir={x:Math.sin(worldAngle),y:-Math.cos(worldAngle)};
    return {prefix,x,color,open,local,origin,dir};
  });
- // Draw eye sockets first and keep pupils above the extended direction lines.
  for(const eye of eyes){
    g.beginPath();g.ellipse(eye.x,-22,11,eye.open?8:3,0,0,Math.PI*2);
    g.fillStyle=eye.open?'#fbf5eb':'#b49b8c';g.fill();
@@ -845,18 +880,30 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.68;g.clearR
    const t=Math.min(...times.filter(v=>Number.isFinite(v)&&v>0));
    return Number.isFinite(t)?{x:p.x+t*d.x,y:p.y+t*d.y}:p;
  }
- let meeting=null;
- if(eyes.every(eye=>eye.open)){
-   const [L,R]=eyes;
-   const denominator=cross(L.dir,R.dir);
+ let meeting=null,calibratedTarget=false;
+ const estimate=displayedVergenceForIndex(state.index);
+ if(state.calibration.fit&&eyes.every(eye=>eye.open)&&Number.isFinite(estimate.meters)&&estimate.meters>0){
+   const left=a.leftWorld*RAD,right=a.rightWorld*RAD;
+   if(Number.isFinite(left)&&Number.isFinite(right)){
+     const bearing=Math.atan2(Math.sin(left)+Math.sin(right),Math.cos(left)+Math.cos(right));
+     // Exactly the same radial scale as the 0.5 m concentric rings.
+     const ringStep=Math.max(70,Math.min(w*.46,h*.60,cy-26))/6;
+     const pixelsPerMeter=ringStep/0.5;
+     const radius=estimate.meters*pixelsPerMeter;
+     const target={x:cx+Math.sin(bearing)*radius,y:cy-Math.cos(bearing)*radius};
+     if(target.x>=edgePadding&&target.x<=w-edgePadding&&target.y>=edgePadding&&target.y<=h-edgePadding){
+       meeting=target;calibratedTarget=true;
+     }
+   }
+ }
+ if(!meeting&&eyes.every(eye=>eye.open)&&!state.calibration.fit){
+   // Before calibration, retain the original raw optical-axis intersection.
+   const [L,R]=eyes,denominator=cross(L.dir,R.dir);
    if(Math.abs(denominator)>1e-8){
      const between={x:R.origin.x-L.origin.x,y:R.origin.y-L.origin.y};
-     const t=cross(between,R.dir)/denominator;
-     const u=cross(between,L.dir)/denominator;
+     const t=cross(between,R.dir)/denominator,u=cross(between,L.dir)/denominator;
      const p={x:L.origin.x+t*L.dir.x,y:L.origin.y+t*L.dir.y};
-     if(t>0&&u>0&&p.x>=edgePadding&&p.x<=w-edgePadding&&p.y>=edgePadding&&p.y<=h-edgePadding){
-       meeting=p;
-     }
+     if(t>0&&u>0&&p.x>=edgePadding&&p.x<=w-edgePadding&&p.y>=edgePadding&&p.y<=h-edgePadding)meeting=p;
    }
  }
  // Convert screen-coordinate ray endpoints back to rotated head coordinates.
@@ -877,6 +924,15 @@ function drawScene(){if(!sw||!sh)return;const w=sw,h=sh,cx=w/2,cy=h*.68;g.clearR
    g.fillStyle='#2c221b';g.fill();
  }
  arrow(g,0,-68,0,-123,'#3E709B',3.2);g.restore();
+ if(calibratedTarget&&meeting){
+   g.beginPath();g.arc(meeting.x,meeting.y,4.5,0,Math.PI*2);
+   g.fillStyle='#568871';g.fill();g.lineWidth=1.5;g.strokeStyle='#ffffff';g.stroke();
+   // Keep a distance label legible even when the target is near the edge.
+   const dx=meeting.x>w-94?-10:11;
+   const align=dx<0?'right':'left';
+   const ly=clamp(meeting.y-13,24,h-15);
+   txt(g,estimate.meters.toFixed(2)+' m',meeting.x+dx,ly,11,'#3B775C',align,750);
+ }
 }
 function drawChart(){if(!ow||!oh||!state.rows.length)return;const w=ow,h=oh,padX=8,padY=12,WW=w-2*padX,HH=h-2*padY;og.clearRect(0,0,w,h);og.fillStyle='#ffffff';og.fillRect(0,0,w,h);let lo=Infinity,hi=-Infinity;const stride=Math.max(1,Math.floor(state.rows.length/1400));for(let i=0;i<state.rows.length;i+=stride){const a=angles(i);if(!a)continue;for(const v of [a.head,a.leftWorld,a.rightWorld])if(Number.isFinite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}}lo=Math.min(lo,0);hi=Math.max(hi,0);if(!Number.isFinite(lo)){lo=-30;hi=30;}const expand=Math.max(5,(hi-lo)*.09);lo-=expand;hi+=expand;const X=i=>padX+i/Math.max(1,state.rows.length-1)*WW,Y=v=>padY+(hi-v)/(hi-lo)*HH;for(const frac of [0,.25,.5,.75,1]){const yy=padY+frac*HH;stroke(og,padX,yy,w-padX,yy,'#E4E6E3',.8);txt(og,(hi-frac*(hi-lo)).toFixed(0)+'°',w-9,yy-7,9,'#7D898A','right');}
  for(const [k,color] of [['head','#3E709B'],['leftWorld','#B67434'],['rightWorld','#8666A6']]){og.beginPath();og.lineWidth=1.8;og.strokeStyle=color;let started=false;for(let i=0;i<state.rows.length;i+=Math.max(1,Math.floor(state.rows.length/Math.max(500,w*2)))){const a=angles(i),v=a?a[k]:NaN;if(!Number.isFinite(v)){started=false;continue;}const x=X(i),y=Y(v);if(!started){og.moveTo(x,y);started=true;}else og.lineTo(x,y);}const last=angles(state.rows.length-1);if(last&&Number.isFinite(last[k]))og.lineTo(X(state.rows.length-1),Y(last[k]));og.stroke();}
@@ -885,11 +941,11 @@ function render(){if(!state.rows.length){drawScene();return;}const r=state.rows[
  const b=state.rows[state.baseline];
  const fusedHead=Number.isFinite(r.headUnwrap)&&Number.isFinite(b.headUnwrap)?r.headUnwrap-b.headUnwrap:NaN;
  const rawHead=Number.isFinite(r.gyroHeadUnwrap)&&Number.isFinite(b.gyroHeadUnwrap)?r.gyroHeadUnwrap-b.gyroHeadUnwrap:NaN;
- el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2)+' mm':'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2)+' mm':'—';const verg=vergenceForRow(r),cal=calibratedDistanceForRow(r);
+ el('orientationDiff').textContent=Number.isFinite(fusedHead)&&Number.isFinite(rawHead)?'Raw–fused difference: '+fmtDeg(rawHead-fusedHead)+'  ·  fused '+fmtDeg(fusedHead)+'  ·  gyro '+fmtDeg(rawHead):'Raw–fused difference: —';el('eyeValue').textContent=fmtDeg(Number.isFinite(a.leftWorld)?wrap180(a.leftWorld):NaN);el('rightEyeValue').textContent=fmtDeg(Number.isFinite(a.rightWorld)?wrap180(a.rightWorld):NaN);el('rightEyeCaption').textContent=Number.isFinite(a.rightWorld)?'Relative to baseline head':'Eye closed / unavailable';el('fixValue').textContent=r.fix===null?'—':'#'+r.fix;el('fixCaption').textContent=r.fix===null?'No fixation label':'Neon fixation event';el('pupilValue').textContent=r.leftValid&&Number.isFinite(r.pupil)?r.pupil.toFixed(2)+' mm':'—';el('rightPupilValue').textContent=r.rightValid&&Number.isFinite(r.rightPupil)?r.rightPupil.toFixed(2)+' mm':'—';const verg=vergenceForRow(r),cal=displayedVergenceForIndex(state.index);
  if(state.calibration.fit){
   el('vergenceValue').textContent=cal.meters===Infinity?'>3 m':fmtMeters(cal.meters);
-  el('vergenceCaption').textContent='Calibrated · raw '+fmtMeters(verg.meters)+' · '+cal.reason;
- }else{el('vergenceValue').textContent=fmtMeters(verg.meters);el('vergenceCaption').textContent=verg.reason+' · raw IPD '+Math.round(getIpdMeters()*1000)+' mm';}
+  el('vergenceCaption').textContent='Calibrated'+(Number(el('vergSmooth').value)?' · smoothed':'')+' · raw '+fmtMeters(verg.meters);
+ }else{el('vergenceValue').textContent=fmtMeters(cal.meters);el('vergenceCaption').textContent=cal.reason+' · raw IPD '+Math.round(getIpdMeters()*1000)+' mm';}
  const ai=nearestAiDepth(r.ts);
  el('aiDepthValue').textContent=ai?(Number.isFinite(ai.meters)?fmtMeters(ai.meters):(Number.isFinite(ai.relative)?ai.relative.toFixed(0)+' rel.':'—')):'—';
  el('aiDepthCaption').textContent=ai?(Number.isFinite(ai.meters)?'Metric DA3 · scene-video estimate':'Relative depth only · not meters'):'No matched scene frame (±100 ms)';
@@ -1059,7 +1115,7 @@ el('orientationMode').addEventListener('change',()=>{pause();render();});
 for(let i=0;i<3;i++)el('calCapture'+i).addEventListener('click',()=>captureCalibrationPoint(i));
 el('calFit').addEventListener('click',fitVergenceCalibration);el('calClear').addEventListener('click',()=>clearVergenceCalibration());
 for(const btn of document.querySelectorAll('[data-speed]'))btn.addEventListener('click',()=>{if(state.playing)pause();state.speed=Number(btn.dataset.speed);video.playbackRate=state.speed;el('playSpeedLabel').textContent=state.speed+'×';document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===btn));});
-el('guides').addEventListener('change',render);
+el('guides').addEventListener('change',render);el('vergSmooth').addEventListener('change',render);
 function pointToIndex(event){const rect=over.getBoundingClientRect();return clamp(Math.round((event.clientX-rect.left-8)/(rect.width-16)*(state.rows.length-1)),0,state.rows.length-1);}let dragging=false;over.addEventListener('pointerdown',e=>{if(!state.rows.length)return;dragging=true;over.setPointerCapture(e.pointerId);setIndex(pointToIndex(e));});over.addEventListener('pointermove',e=>{if(dragging)setIndex(pointToIndex(e));});over.addEventListener('pointerup',()=>dragging=false);over.addEventListener('pointercancel',()=>dragging=false);
 document.addEventListener('keydown',e=>{if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();play();}else if(e.code==='ArrowRight'&&state.rows.length){e.preventDefault();setIndex(state.index+1);}else if(e.code==='ArrowLeft'&&state.rows.length){e.preventDefault();setIndex(state.index-1);}});
 window.addEventListener('resize',resizeAll);if(typeof ResizeObserver!=='undefined')new ResizeObserver(drawGazeOverlay).observe(gazeCanvas.parentElement);
